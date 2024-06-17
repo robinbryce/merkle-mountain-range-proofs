@@ -185,22 +185,47 @@ def print_canonical39_index_height():
 def print_canonical39_inclusion_paths():
     # note we produce inclusion paths for _all_ nodes
 
-    print("|" + " i  " + "|" + " s  " + "|" + "inclusion paths" + "|" + "accumulator" + "|")
+    max_accumulator = peaks(39)
+    smax_accumulator =  "[" + ", ".join([str(p-1) for p in max_accumulator]) + "]"
+    print("|" + " i  " + "|" + " s  " + "|" + "min inclusion paths" + "|" + "min accumulator" + "|" + "max inclusion paths" + "|" + smax_accumulator.ljust(20, " ") + "|")
     print("|:" + "-".ljust(3, "-") + "|" + "-".ljust(3, "-") + ":|" + "-".ljust(20, "-") + "|" + "-".ljust(20, "-") + "|")
 
     for i in range(39):
         s = complete_mmr_size(i)
+        accumulator = peaks(s)
         path = index_proof_path(s, i)
         spath = "[" + ", ".join([str(p) for p in path]) + "]"
-        accumulator = peaks(s)
+        path_39 = index_proof_path(39, i)
+        spath_39 = "[" + ", ".join([str(p) for p in path_39]) + "]"
+
         # it is very confusingif we list the accumulator as positions yet have the paths be indices. so lets not do that.
         saccumulator = "[" + ", ".join([str(p-1) for p in accumulator]) + "]"
         
-        print("|" + '{:4}'.format(i) + "|" + 'MMR({})'.format(s).ljust(7, " ") + "|" + spath.ljust(20, " ") + "|" + saccumulator.ljust(20, " ") + "|")
+        print("|" + '{:4}'.format(i) + "|" + 'MMR({})'.format(s).ljust(7, " ") + "|" + spath.ljust(20, " ") + "|" + saccumulator.ljust(20, " ") + "|" + spath_39.ljust(20, " ") + "|" + smax_accumulator.ljust(20, " ") + "|")
+
+def print_canonical39_inclusion_paths2():
+    # note we produce inclusion paths for _all_ nodes
+
+    print("|" + " i  " + "|" + " MMR  " + "|" + "inclusion path" + "|" + "accumulator" + "|")
+    print("|:" + "-".ljust(3, "-") + "|" + "-".ljust(3, "-") + ":|" + "-".ljust(20, "-") + "|" + "-".ljust(20, "-") + "|")
+
+    for i in range(39):
+        s = complete_mmr_size(i)
+        while s < 39:
+            accumulator = peaks(s)
+            path = index_proof_path(s, i)
+            spath = "[" + ", ".join([str(p) for p in path]) + "]"
+
+            # it is very confusingif we list the accumulator as positions yet have the paths be indices. so lets not do that.
+            saccumulator = "[" + ", ".join([str(p-1) for p in accumulator]) + "]"
+        
+            print("|" + '{:4}'.format(i) + "|" + 'MMR({})'.format(s).ljust(7, " ") + "|" + spath.ljust(20, " ") + "|" + saccumulator.ljust(20, " ") + "|")
+ 
+            s = complete_mmr_size(s+1)
 
 import sys
 if __name__ == "__main__":
-    print_canonical39_inclusion_paths()
+    print_canonical39_inclusion_paths2()
     sys.exit(0)
     print_canonical39_index_height()
     db = KatDB()
