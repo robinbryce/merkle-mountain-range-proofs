@@ -323,27 +323,28 @@ Note that at the #termination_condition it MAY be convenient for implementations
 For reference in the supplementary worked examples, the decision points are annotated (1), (2)
 
 ```python
+def index_proof_path(s, i) -> List[int]:
+    """Returns the list of node indices proving inclusion of i"""
 
-  proof = []
-  g = IndexHeight(i)
+    path = []
+    g = index_height(i)
 
-  while True:
+    while True:
 
-    iLocalPeak = i
- 
-    if IndexHeight(i+1) > g: # (1)
-        iSibling = iLocalPeak - SiblingOffset(g)
-        i += 1
-    else:
-        iSibling = iLocalPeak + SiblingOffset(g)
-        i += 2 << g
-  
-    if iSibling >= mmrSize: # (2)
-        return proof, iLocalPeak, g
+        isibling = None # lexical scopes
 
-    proof = append(proof, iSibling)
-  
-    g += 1
+        ilocalpeak = i
+        if index_height(i+1) > g:
+            isibling = ilocalpeak - ((2 << g) -1)
+            i = i + 1
+        else:
+            isibling = ilocalpeak + ((2 << g) -1)
+            i = i + (2 << g)
+
+        if isibling >= s:
+            return path
+        path.append(isibling)
+        g = g + 1
 ```
 
 ## Inclusion and Consistency Verification Algorithms
@@ -424,12 +425,15 @@ for each pathItem in proof:
 
 Index height returns the zero based height `g` of the node index `i`
 
-```
-  pos = i + 1
-  while !AllOnes(pos):
-    pos = pos - MostSigBit(pos) + 1
+```python
+def index_height(i) -> int:
+    """Returns the 0 based height of the mmr entry indexed by i"""
+    # convert the index to a position to take advantage of the bit patterns afforded
+    pos = i + 1
+    while not all_ones(pos):
+      pos = pos - most_sig_bit(pos) + 1
 
-  return BitLength(pos) - 1
+    return pos.bit_length() - 1
 ```
 
 
@@ -548,6 +552,12 @@ TopHeight(7) = 2
 ### SiblingOffset `(2 << g) - 1`
 ### JumpLeftPerfect `pos - MostSigBit(pos) + 1`
 ### MostSigBit `1 << (BitLength(pos) - 1)`
+
+```python
+def most_sig_bit(pos) -> int:
+    """Returns the mask for the the most significant bit in pos"""
+    return 1 << (pos.bit_length() - 1)
+```
   
 We assume the following primitives for working with bits as they have obvious implementations.
 
@@ -555,9 +565,23 @@ We assume the following primitives for working with bits as they have obvious im
 
 The minimum number of bits to represent pos. b011 would be 2, b010 would be 2, and b001 would be 1.
 
+```python
+def bit_length(pos):
+    return pos.bit_length()
+```
+
 ### AllOnes
 
 Tests if all bits, from the most significant that is set, are 1, b0111 would be true, b0101 would be false.
+
+```python
+def all_ones(pos) -> bool:
+    """Returns true if all bits, starting with the most significant, are 1"""
+
+    msb = most_sig_bit(pos)
+    mask = (1 << (msb + 1)) - 1
+    return pos == mask
+```
 
 ### OnesCount
 
@@ -668,6 +692,50 @@ We define `H(v)` for test vector leaf values `f` as the SHA-256 hash of the the 
  | 37 |6a169105dcc487dbbae5747a0fd9b1d33a40320cf91cf9a323579139e7ff72aa|
  | 38 |e9a5f5201eb3c3c856e0a224527af5ac7eb1767fb1aff9bd53ba41a60cde9785|
 
+### IndexProofPath
+
+| i  | s  |inclusion paths|accumulator|
+|:---|---:|--------------------|--------------------|
+|   0|MMR(1) |[]                  |[0]                 |
+|   1|MMR(3) |[0]                 |[2]                 |
+|   2|MMR(3) |[]                  |[2]                 |
+|   3|MMR(4) |[]                  |[2, 3]              |
+|   4|MMR(7) |[3, 2]              |[6]                 |
+|   5|MMR(7) |[2]                 |[6]                 |
+|   6|MMR(7) |[]                  |[6]                 |
+|   7|MMR(8) |[]                  |[6, 7]              |
+|   8|MMR(10)|[7]                 |[6, 9]              |
+|   9|MMR(10)|[]                  |[6, 9]              |
+|  10|MMR(11)|[]                  |[6, 9, 10]          |
+|  11|MMR(15)|[10, 9, 6]          |[14]                |
+|  12|MMR(15)|[9, 6]              |[14]                |
+|  13|MMR(15)|[6]                 |[14]                |
+|  14|MMR(15)|[]                  |[14]                |
+|  15|MMR(16)|[]                  |[14, 15]            |
+|  16|MMR(18)|[15]                |[14, 17]            |
+|  17|MMR(18)|[]                  |[14, 17]            |
+|  18|MMR(19)|[]                  |[14, 17, 18]        |
+|  19|MMR(22)|[18, 17]            |[14, 21]            |
+|  20|MMR(22)|[17]                |[14, 21]            |
+|  21|MMR(22)|[]                  |[14, 21]            |
+|  22|MMR(23)|[]                  |[14, 21, 22]        |
+|  23|MMR(25)|[22]                |[14, 21, 24]        |
+|  24|MMR(25)|[]                  |[14, 21, 24]        |
+|  25|MMR(26)|[]                  |[14, 21, 24, 25]    |
+|  26|MMR(31)|[25, 24, 21, 14]    |[30]                |
+|  27|MMR(31)|[24, 21, 14]        |[30]                |
+|  28|MMR(31)|[21, 14]            |[30]                |
+|  29|MMR(31)|[14]                |[30]                |
+|  30|MMR(31)|[]                  |[30]                |
+|  31|MMR(32)|[]                  |[30, 31]            |
+|  32|MMR(34)|[31]                |[30, 33]            |
+|  33|MMR(34)|[]                  |[30, 33]            |
+|  34|MMR(35)|[]                  |[30, 33, 34]        |
+|  35|MMR(38)|[34, 33]            |[30, 37]            |
+|  36|MMR(38)|[33]                |[30, 37]            |
+|  37|MMR(38)|[]                  |[30, 37]            |
+|  38|MMR(39)|[]                  |[30, 37, 38]        |
+
 ## Peak (accumulator) positions for all MMR's to MMR(39)
 
 | S |        accumulator peaks |
@@ -719,6 +787,49 @@ We define `H(v)` for test vector leaf values `f` as the SHA-256 hash of the the 
 |  34| d4fb5649422ff2eaf7b1c0b851585a8cfd14fb08ce11addb30075a96309582a7, 0c9f36783b5929d43c97fe4b170d12137e6950ef1b3a8bd254b15bbacbfdee7f, 4d75f61869104baa4ccff5be73311be9bdd6cc31779301dfc699479403c8a786
 |  37| d4fb5649422ff2eaf7b1c0b851585a8cfd14fb08ce11addb30075a96309582a7, 6a169105dcc487dbbae5747a0fd9b1d33a40320cf91cf9a323579139e7ff72aa
 |  38| d4fb5649422ff2eaf7b1c0b851585a8cfd14fb08ce11addb30075a96309582a7, 6a169105dcc487dbbae5747a0fd9b1d33a40320cf91cf9a323579139e7ff72aa, e9a5f5201eb3c3c856e0a224527af5ac7eb1767fb1aff9bd53ba41a60cde9785
+
+### IndexHeight values
+
+|  i |  g |
+|:---|---:|
+|   0|   0|
+|   1|   0|
+|   2|   1|
+|   3|   0|
+|   4|   0|
+|   5|   1|
+|   6|   2|
+|   7|   0|
+|   8|   0|
+|   9|   1|
+|  10|   0|
+|  11|   0|
+|  12|   1|
+|  13|   2|
+|  14|   3|
+|  15|   0|
+|  16|   0|
+|  17|   1|
+|  18|   0|
+|  19|   0|
+|  20|   1|
+|  21|   2|
+|  22|   0|
+|  23|   0|
+|  24|   1|
+|  25|   0|
+|  26|   0|
+|  27|   1|
+|  28|   2|
+|  29|   3|
+|  30|   4|
+|  31|   0|
+|  32|   0|
+|  33|   1|
+|  34|   0|
+|  35|   0|
+|  36|   1|
+|  37|   2|
 
 ### Normative References
 

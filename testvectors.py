@@ -5,6 +5,9 @@ See the notational conventions in the accompanying draft text for definition of 
 """
 
 from algorithms import peaks
+from algorithms import index_height
+from algorithms import index_proof_path
+from algorithms import complete_mmr_size
 
 def hash_num64(v :int) -> bytes:
     """
@@ -150,35 +153,62 @@ def print_canonical39_accumulator_peaks(db=None):
     complete_mmrs = [1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38, 39]
     # leaf_indices= [0, 1, 2, 3, 4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 
-    id_head = " pos"
+    id_head = " S "
     if db:
-        id_head = " i  "
+        id_head = " S-1  "
     print("|" + id_head + "|" + " "*8 + "accumulator peaks" + " " + "|")
     print("|" + "-"*4 + "|" + "-"*32 + "|")
 
-    offset = 1
+    offset = 0
     if db:
-        offset = 0
+        offset = 1
 
     for i in range(len(complete_mmrs)):
         s = complete_mmrs[i]
         peak_values = peaks(s) # returns a list of positions, not indices
         if db:
-            peak_values = [db.get(p-1).hex() for p in peak_values]
+            peak_values = ['"' + "" + db.get(p-1).hex() + '"'  for p in peak_values]
         else:
             peak_values = [str(p) for p in peak_values]
 
-        print("|" + '{:4}'.format(i+offset) + "| " + ", ".join(peak_values))
+        print("|" + '{:4}'.format(complete_mmrs[i]-offset) + "| " + ", ".join(peak_values))
+        # adjust to generate kat tables for particular languages.
+        #print('{%d, []string{%s}},' % (complete_mmrs[i]-offset, ", ".join(peak_values)))
 
+def print_canonical39_index_height():
 
+    print("|  i |  g |")
+    print("|:---|---:|")
+    for i in range(38):
+        print("|{:4}|{:4}|".format(i, index_height(i)))
 
+def print_canonical39_inclusion_paths():
+    # note we produce inclusion paths for _all_ nodes
+
+    print("|" + " i  " + "|" + " s  " + "|" + "inclusion paths" + "|" + "accumulator" + "|")
+    print("|:" + "-".ljust(3, "-") + "|" + "-".ljust(3, "-") + ":|" + "-".ljust(20, "-") + "|" + "-".ljust(20, "-") + "|")
+
+    for i in range(39):
+        s = complete_mmr_size(i)
+        path = index_proof_path(s, i)
+        spath = "[" + ", ".join([str(p) for p in path]) + "]"
+        accumulator = peaks(s)
+        # it is very confusingif we list the accumulator as positions yet have the paths be indices. so lets not do that.
+        saccumulator = "[" + ", ".join([str(p-1) for p in accumulator]) + "]"
+        
+        print("|" + '{:4}'.format(i) + "|" + 'MMR({})'.format(s).ljust(7, " ") + "|" + spath.ljust(20, " ") + "|" + saccumulator.ljust(20, " ") + "|")
+
+import sys
 if __name__ == "__main__":
+    print_canonical39_inclusion_paths()
+    sys.exit(0)
+    print_canonical39_index_height()
+    db = KatDB()
+    db.init_canonical39()
+    print_canonical39_accumulator_peaks(db=db)
     print_canonical39_leaves()
     print()
     print_canonical39()
     print()
     print_canonical39_accumulator_peaks()
-    db = KatDB()
-    db.init_canonical39()
-    print_canonical39_accumulator_peaks(db=db)
     # print_canonical39_accumulator_peaks(as_indices=True)
