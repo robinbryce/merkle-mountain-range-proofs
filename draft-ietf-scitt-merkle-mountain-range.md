@@ -168,18 +168,18 @@ The left most node at any height is always "all ones".
 
 ## Notational Conventions
 
-`i` shall be the index of a node in the MMR
-`pos` shall be `i+1`
-`e` shall be the zero based index of leaf entry in the MMR
-`f` shall be a leaf value, which is `H(x)`
-`h` shall be the 1 based tree height
-`g` shall be the 0 based height, `h-1`
-`v` shall be any node, including a leaf node value, which will be the result of `H(x)`.
-`S` shall be any valid MMR size, and is uniquely identifying for an MMR state
-`A` shall be the the accumulator for any valid MMR size `S`
-`R` shall be the the sparse accumulator, of [ReyzinYakoubov], for any valid MMR size `S`
-`H(x)` shall be the SHA3/256 digest of any value x
-`||` shall mean concatenation of raw byte representations of the referenced values.
+- `i` shall be the index of a node in the MMR
+- `pos` shall be `i+1`
+- `e` shall be the zero based index of leaf entry in the MMR
+- `f` shall be a leaf value, which is `H(x)`
+- `h` shall be the 1 based tree height
+- `g` shall be the 0 based height, `h-1`
+- `v` shall be any node, including a leaf node value, which will be the result of `H(x)`.
+- `S` shall be any valid MMR size, and is uniquely identifying for an MMR state
+- `A` shall be the the accumulator for any valid MMR size `S`
+- `R` shall be the the sparse accumulator, of [ReyzinYakoubov], for any valid MMR size `S`
+- `H(x)` shall be the SHA3/256 digest of any value x
+- `||` shall mean concatenation of raw byte representations of the referenced values.
 
 
 ## Implementation defined methods
@@ -235,7 +235,7 @@ The application MUST define how it produces `x` such that parties reliant on the
 
 All numbers are unsigned 64 bit integers. The maximum height of a single tree is 64.
 
-Were a tree to accept a new addition once every 10 mili seconds, it would take roughly 4.6 million milenia to over flow.
+Were a tree to accept a new addition once every 10 milliseconds, it would take roughly 4.6 million milenia to over flow.
 
 Should a system exist that can extend a tree fast enough for this to be a limitation,
 the same advantages that make MMR's convenient to work with also accrue to combinations of trees.
