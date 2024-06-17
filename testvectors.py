@@ -6,14 +6,14 @@ See the notational conventions in the accompanying draft text for definition of 
 
 def hash_num64(v :int) -> bytes:
     """
-    Compute the sha3/256 hash of v
+    Compute the SHA-256 hash of v
 
     Args:
         v (int): assumed to be an unsigned integer using at most 64 bits
     Returns:
-        bytes: the SHA3/256 hash of the big endian representation of v
+        bytes: the SHA-256 hash of the big endian representation of v
     """
-    return hashlib.sha3_256(v.to_bytes(8, byteorder='big', signed=False)).digest()
+    return hashlib.sha256(v.to_bytes(8, byteorder='big', signed=False)).digest()
 
 def hash_pospair64(pos: int, vleft: bytes, vright: bytes) -> bytes:
     """
@@ -27,7 +27,7 @@ def hash_pospair64(pos: int, vleft: bytes, vright: bytes) -> bytes:
     Returns:
         The value for the node identified by pos
     """
-    h = hashlib.sha3_256()
+    h = hashlib.sha256()
     h.update(pos.to_bytes(8, byteorder='big', signed=False))
     h.update(vleft)
     h.update(vright)
@@ -140,6 +140,21 @@ def print_canonical39():
         print("|" + db.store[i].hex() + "|" + '{:4}'.format(i) + "|")
 
 if __name__ == "__main__":
+    #v = hash_num64(0)
+    #x = v.hex()
+
+    #v = 0
+    #v = v.to_bytes(8, byteorder='big', signed=False)
+    #x = v.hex()
+    #v = hashlib.sha256(v).digest()
+    #x = v.hex()
+
+    #v = 0
+    #v = v.to_bytes(8, byteorder='little', signed=False)
+    #x = v.hex()
+    #v = hashlib.sha3_256(v).digest()
+    #x = v.hex()
+    #print(v)
     print_canonical39_leaves()
     print()
     print_canonical39()
