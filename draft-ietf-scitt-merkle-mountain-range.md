@@ -50,10 +50,19 @@ Further work in [BNT] defines additional advantages for contexts in which "strea
 To maximise the benefits of using an MMR, inclusion and consistency proofs are defined against the accumulator cited above,
 rather than a single tree root. In this section we describe and define the accumulator in the context of an MMR.
 
-An MMR is a flat base binary tree, where incomplete sub-trees are maintained in series.
-The roots of each sub-tree are described as peaks.
-The set of peaks for an MMR of any size is its accumulator. And this uniquely and succinctly commits the content of the MMR.
-As the tree grows, elements in the accumulator change with low frequency. This frequency is defined as $$\log_2(n)$$ in the number of subsequent tree additions.
+An MMR is a flat base binary tree, where complete sub-trees are maintained in series.
+Only the last sub tree may be incomplete.
+The roots of each complete sub-tree are described as peaks.
+Given the only the preceding peaks, and the leaf nodes of the last sub tree,
+it is always possible to complete the last sub tree.
+For every even numbered node addition, this process will always "burry" at least one preceding peak,
+by absorbing the newly complete peak under its predecessor.
+This process proceeds until there are no more "completable" predecessors,
+needing only the predecessors previous peak at each step.
+The set of peaks for an MMR of any size is its accumulator (see [ReyzinYakoubov]).
+And this uniquely and succinctly commits the content of the MMR.
+As the tree grows, elements in the accumulator change with low frequency.
+This frequency is defined as $$\log_2(n)$$ in the number of subsequent tree additions.
 It is important to note that while the accumulator state evolves, all nodes in the tree are write once.
 The accumulator simply comprises the nodes at the "peaks" for the current MMR state.
 All paths for proofs of inclusion lead to an accumulator peak, rather than a single "mono" root.
