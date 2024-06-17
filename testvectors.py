@@ -4,6 +4,8 @@ import hashlib
 See the notational conventions in the accompanying draft text for definition of short hand variables.
 """
 
+from algorithms import peaks
+
 def hash_num64(v :int) -> bytes:
     """
     Compute the SHA-256 hash of v
@@ -48,6 +50,10 @@ class KatDB:
 
     def put(self, i :int, v: bytes):
         self.store[i] = v
+
+    def get(self, i) -> bytes:
+        return self.store[i]
+
 
     def init_canonical39(self):
         """
@@ -122,39 +128,57 @@ class KatDB:
 def print_canonical39_leaves():
     db = KatDB()
     db.init_canonical39()
-    print("|" + " "*(32-5-1) + "leaf values" + " "*(32-5) + "|" + "  i " + "|" + "  e " + "|")
-    print("|" + "-"*64 + "|:" + "-"*3 + "|" + "-"*3 + ":|")
+    print("|" + "  i " + "|" + "  e " + "|" + "|" + " "*(32-5-1) + "leaf values" + " "*(32-5))
+    print("|:" + "-"*3 + "|" + "-"*3 + ":|" + "|" + "-"*64 )
 
     leaf_indices = [0, 1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38]
     for e in range(21):
         i = leaf_indices[e]
-        print("|" + db.store[i].hex() + "|" + '{:4}'.format(i) + "|" + '{:4}'.format(e) + "|")
+        print("|" + '{:4}'.format(i) + "|" + '{:4}'.format(e) + "|" + db.store[i].hex() + "|")
 
 def print_canonical39():
     db = KatDB()
     db.init_canonical39()
 
-    print("|" + " "*(32-5-1) + "node values" + " "*(32-5) + "|" + " i  " + "|")
-    print("|" + "-"*64 + "|" + "-"*3 + ":|")
+    print("|" + " i  " + "|" + " "*(32-5-1) + "node values" + " "*(32-5) + "|")
+    print("|" + "-"*3 + ":|" + "-"*64 + "|")
     for i in range(39):
-        print("|" + db.store[i].hex() + "|" + '{:4}'.format(i) + "|")
+        print("|" + '{:4}'.format(i) + "|" + db.store[i].hex() + "|")
+
+def print_canonical39_accumulator_peaks(db=None):
+    # there is a complete mmr for each leaf
+    complete_mmrs = [1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38, 39]
+    # leaf_indices= [0, 1, 2, 3, 4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+
+    id_head = " pos"
+    if db:
+        id_head = " i  "
+    print("|" + id_head + "|" + " "*8 + "accumulator peaks" + " " + "|")
+    print("|" + "-"*4 + "|" + "-"*32 + "|")
+
+    offset = 1
+    if db:
+        offset = 0
+
+    for i in range(len(complete_mmrs)):
+        s = complete_mmrs[i]
+        peak_values = peaks(s) # returns a list of positions, not indices
+        if db:
+            peak_values = [db.get(p-1).hex() for p in peak_values]
+        else:
+            peak_values = [str(p) for p in peak_values]
+
+        print("|" + '{:4}'.format(i+offset) + "| " + ", ".join(peak_values))
+
+
 
 if __name__ == "__main__":
-    #v = hash_num64(0)
-    #x = v.hex()
-
-    #v = 0
-    #v = v.to_bytes(8, byteorder='big', signed=False)
-    #x = v.hex()
-    #v = hashlib.sha256(v).digest()
-    #x = v.hex()
-
-    #v = 0
-    #v = v.to_bytes(8, byteorder='little', signed=False)
-    #x = v.hex()
-    #v = hashlib.sha3_256(v).digest()
-    #x = v.hex()
-    #print(v)
     print_canonical39_leaves()
     print()
     print_canonical39()
+    print()
+    print_canonical39_accumulator_peaks()
+    db = KatDB()
+    db.init_canonical39()
+    print_canonical39_accumulator_peaks(db=db)
+    # print_canonical39_accumulator_peaks(as_indices=True)
