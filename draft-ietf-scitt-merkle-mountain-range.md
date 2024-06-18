@@ -405,6 +405,70 @@ def verify_inclusion_path(s: int, i: int, nodehash: bytes, proof: List[bytes], r
     return (False, len(proof))
 ```
 
+### ConsistencyProof
+
+Words tbd
+
+```python
+def consistency_proof(asize: int, bsize: int) -> List[int]:
+    """Returns a proof of consistency between the MMR's identified by asize and bsize.
+
+    The returned path is the concatenation of the inclusion proofs
+    authenticating the peaks of MMR(a) in MMR(b)
+    """
+    apeaks = peaks(asize)
+
+    proof = []
+
+    for apos in apeaks:
+        proof.extend(index_proof_path(bsize, apos-1))
+
+    return proof
+```
+
+### VerifyConsistencyProof
+
+Words tbd
+
+```python
+def verify_consistency(
+        asize: int, bsize: int,
+        apeakhashes: List[bytes], bpeakhashes: List[bytes],
+        path: List[bytes]) -> bool:
+    """
+    """
+    apeakpositions = peaks(asize)
+    bpeakpositions = peaks(bsize)
+
+    if len(apeakhashes) != len(apeakpositions):
+        return False
+    
+    if len(bpeakhashes) != len(bpeakpositions):
+        return False
+
+    ipeaka = ipeakb = 0
+
+    apos = apeakpositions[ipeaka]
+
+    ok = False
+    while ipeaka < len(apeakhashes):
+        bpeak = bpeakpositions[ipeakb]
+        while apos  <= bpeak:
+            (ok, used) = verify_inclusion_path(
+                bsize, apeakhashes[ipeaka], apos-1,
+                path, bpeakhashes[ipeakb])
+            if not (ok or used > len(path)):
+                return False
+            path = path[used:]
+            ipeaka += 1
+            if ipeaka == len(apeakhashes):
+                break
+            apos = apeakpositions[ipeaka]
+        ipeakb += 1
+
+    return ok and len(path) == 0
+```
+
 ## Algorithms for working with the accumulator
 
 ### IndexHeight(i)
