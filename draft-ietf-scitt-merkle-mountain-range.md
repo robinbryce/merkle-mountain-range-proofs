@@ -43,7 +43,8 @@ These properties mostly follow from:
   the authentication path element indices is known and permanent.
   It can be easily computed without needing to materialize the tree in whole or in part.
 
-Further work in [BNT] defines additional advantages for contexts in which "stream" processing of verifiable data is desirable. Post-order, Pre-order and in-order tree traversal are defined by [KnuthTBT]
+Further work in [BNT] defines additional advantages for contexts in which "stream" processing of verifiable data is desirable.
+Post-order, Pre-order and in-order tree traversal are defined by [KnuthTBT]
 
 ## Accumulator and Structure
 
@@ -53,12 +54,12 @@ rather than a single tree root. In this section we describe and define the accum
 An MMR is a flat base binary tree, where complete sub-trees are maintained in series.
 Only the last sub tree may be incomplete.
 The roots of each complete sub-tree are described as peaks.
-Given the only the preceding peaks, and the leaf nodes of the last sub tree,
+Given only the preceding peaks, and the leaf nodes of the last sub tree,
 it is always possible to complete the last sub tree.
 For every even numbered node addition, this process will always "burry" at least one preceding peak,
 by absorbing the newly complete peak under its predecessor.
 This process proceeds until there are no more "completable" predecessors,
-needing only the predecessors previous peak at each step.
+needing only the previous peak at each step.
 The set of peaks for an MMR of any size is its accumulator (see [ReyzinYakoubov]).
 And this uniquely and succinctly commits the content of the MMR.
 As the tree grows, elements in the accumulator change with low frequency.
@@ -66,7 +67,7 @@ This frequency is defined as $$\log_2(n)$$ in the number of subsequent tree addi
 It is important to note that while the accumulator state evolves, all nodes in the tree are write once.
 The accumulator simply comprises the nodes at the "peaks" for the current MMR state.
 All paths for proofs of inclusion lead to an accumulator peak, rather than a single "mono" root.
-Because of this, the inclusion path for any element is strictly append only.
+Because of this, the inclusion path for any element is strictly append only, in addition to the data structure itself being append only.
 Consistency proofs *are* the inclusion proofs for the old-accumulator peaks against the accumulator for the future tree state consistency is being shown for.
 An accumulator is at most tree height long, which is also the maximum length of any single proof of inclusion + 1.
 
@@ -270,18 +271,6 @@ Given,
     1. Goto #looptarget
 1. Return `i` to the caller
 
-
-Editors node: TODO check this algebra is sound
-```
-    iRight := iLeft + SiblingOffset(height) == i - 1
-    because i - (2 << height ) + SiblingOffset(height)
-            => i - (2 << height ) + (2 << height) - 1
-            => i - 1
-    And, intuitively, the 'next' i is always last i + 1, and that is
-    always going to be RHS when we are adding
-    iRight := iLeft + SiblingOffset(height)
-
-```
 ### IndexProofPath(S, i)
 
 IndexProofPath is used to produce the verification paths for inclusion proofs and consistency proofs.
@@ -627,13 +616,11 @@ The count of nodes above and to the left of `pos`
 (v & -v).bit_length() - 1
 ```
 
-## References
-
-# Algorithm Test Vectors
+## Algorithm Test Vectors
 
 In this section we provide known answer outputs for the various algorithms for the `MMR(39)`
 
-## MMR(39)
+### MMR(39)
 
 The node index tree for `MMR(39)` is
 
@@ -660,7 +647,7 @@ The vertical axis is `g`, the one based height of the tree.
 
 The horizontal axis is `e`, the leaf indices corresponding to the `g=0` nodes in the tree
  
-## MMR(39) leaf values
+### MMR(39) leaf values
 
 We define `H(v)` for test vector leaf values `f` as the SHA-256 hash of the the big endian representation of `e`.
 
@@ -688,7 +675,7 @@ We define `H(v)` for test vector leaf values `f` as the SHA-256 hash of the the 
 | 35 | 19 |0764c726a72f8e1d245f332a1d022fffdada0c4cb2a016886e4b33b66cb9a53f|
 | 38 | 20 |e9a5f5201eb3c3c856e0a224527af5ac7eb1767fb1aff9bd53ba41a60cde9785|
 
-## MMR(39) node values
+### MMR(39) node values
 
  | i  |                          node values                           |
  |:---|----------------------------------------------------------------|
@@ -732,7 +719,7 @@ We define `H(v)` for test vector leaf values `f` as the SHA-256 hash of the the 
  | 37 |6a169105dcc487dbbae5747a0fd9b1d33a40320cf91cf9a323579139e7ff72aa|
  | 38 |e9a5f5201eb3c3c856e0a224527af5ac7eb1767fb1aff9bd53ba41a60cde9785|
 
-## Peak (accumulator) positions for all MMR's to MMR(39)
+### Peak (accumulator) positions for all MMR's to MMR(39)
 
 | S |        accumulator peaks |
 |----|--------------------------------|
@@ -758,7 +745,7 @@ We define `H(v)` for test vector leaf values `f` as the SHA-256 hash of the the 
 |  38| 31, 38
 |  39| 31, 38, 39
 
-## Peak (accumulator) values for all MMR's to MMR(39)
+### Peak (accumulator) values for all MMR's to MMR(39)
 
 | S-1  |        accumulator peaks |
 |----|--------------------------------|
@@ -1039,6 +1026,8 @@ These tables cover the outputs of `IndexHeight` and `PeakBitmap`.
 |e|19   |19   |19   |20   |21   |
 |m|10011|10011|10011|10100|10101|
  
+## References
+
 ### Normative References
 
 * [RFC9162]: https://datatracker.ietf.org/doc/html/rfc9162
