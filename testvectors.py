@@ -211,11 +211,15 @@ def print_canonical39_inclusion_paths():
 def print_canonical39_inclusion_paths2():
     # note we produce inclusion paths for _all_ nodes
 
+    # so we can print the roots
+    db = KatDB()
+    db.init_canonical39()
+
     w1 = 4
     w2 = 20
 
-    print("|" + " i  " + "|" + " MMR  " + "|" + "inclusion path" + "|" + "accumulator" + "|" + "accumulator root index" + "|")
-    print("|:" + "-".ljust(w1-1, "-") + "|" + "-".ljust(w1-1, "-") + ":|" + "-".ljust(w2, "-") + "|" + "-".ljust(w2, "-") + "|" + "-".ljust(w1, "-") + "|")
+    print("|" + " i  " + "|" + " MMR  " + "|" + "inclusion path" + "|" + "accumulator" + "|" + "accumulator root index" + "|" + "root" + "|")
+    print("|:" + "-".ljust(w1-1, "-") + "|" + "-".ljust(w1-1, "-") + ":|" + "-".ljust(w2, "-") + "|" + "-".ljust(w2, "-") + "|" + "-".ljust(w1, "-") + "|" + "-".ljust(w1, "-") + "|")
 
     for i in range(39):
         s = complete_mmr_size(i)
@@ -233,8 +237,16 @@ def print_canonical39_inclusion_paths2():
 
             # it is very confusingif we list the accumulator as positions yet have the paths be indices. so lets not do that.
             saccumulator = "[" + ", ".join([str(p-1) for p in accumulator]) + "]"
+
+            sroot = db.get(accumulator[accumulator_index]).hex()
         
-            print("|" + '{:4}'.format(i) + "|" + 'MMR({})'.format(s).ljust(7, " ") + "|" + spath.ljust(w2, " ") + "|" + saccumulator.ljust(w2, " ") + "|" + str(accumulator_index).ljust(w1, " ") + "|")
+            print(
+                "|" + '{:4}'.format(i) +
+                "|" + 'MMR({})'.format(s).ljust(7, " ") +
+                "|" + spath.ljust(w2, " ") +
+                "|" + saccumulator.ljust(w2, " ") +
+                "|" + str(accumulator_index).ljust(w1, " ") +
+                "|" + sroot + "|")
  
             s = complete_mmr_size(s+1)
 
@@ -292,9 +304,9 @@ def test_verification():
 
 import sys
 if __name__ == "__main__":
-    test_verification()
-    sys.exit(0)
     print_canonical39_inclusion_paths2()
+    sys.exit(0)
+    test_verification()
     print_canonical39_index_height()
     db = KatDB()
     db.init_canonical39()
