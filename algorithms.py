@@ -18,17 +18,17 @@ def consistency_proof(asize: int, bsize: int) -> List[int]:
 
 def verify_consistency(
         asize: int, bsize: int,
-        apeakhashes: List[bytes], bpeakhashes: List[bytes],
+        aaccumulator: List[bytes], baccumulator: List[bytes],
         path: List[bytes]) -> bool:
     """
     """
     apeakpositions = peaks(asize)
     bpeakpositions = peaks(bsize)
 
-    if len(apeakhashes) != len(apeakpositions):
+    if len(aaccumulator) != len(apeakpositions):
         return False
     
-    if len(bpeakhashes) != len(bpeakpositions):
+    if len(baccumulator) != len(bpeakpositions):
         return False
 
     ipeaka = ipeakb = 0
@@ -36,17 +36,17 @@ def verify_consistency(
     apos = apeakpositions[ipeaka]
 
     ok = False
-    while ipeaka < len(apeakhashes):
+    while ipeaka < len(aaccumulator):
         bpeak = bpeakpositions[ipeakb]
         while apos  <= bpeak:
             (ok, used) = verify_inclusion_path(
-                bsize, apeakhashes[ipeaka], apos-1,
-                path, bpeakhashes[ipeakb])
+                bsize, aaccumulator[ipeaka], apos-1,
+                path, baccumulator[ipeakb])
             if not (ok or used > len(path)):
                 return False
             path = path[used:]
             ipeaka += 1
-            if ipeaka == len(apeakhashes):
+            if ipeaka == len(aaccumulator):
                 break
             apos = apeakpositions[ipeaka]
         ipeakb += 1
