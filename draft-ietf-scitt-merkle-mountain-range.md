@@ -46,6 +46,9 @@ These properties mostly follow from:
 Further work in [BNT] defines additional advantages for contexts in which "stream" processing of verifiable data is desirable.
 Post-order, Pre-order and in-order tree traversal are defined by [KnuthTBT]
 
+The algorithms descriptions and examples are derived from the productionized implementation at
+[go-datatrails-merklelog](https://github.com/datatrails/go-datatrails-merklelog/tree/main/mmr)
+
 ## Accumulator and Structure
 
 To maximise the benefits of using an MMR, inclusion and consistency proofs are defined against the accumulator cited above,
