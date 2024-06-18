@@ -96,9 +96,6 @@ def index_height(i: int) -> int:
 
     return pos.bit_length() - 1
 
-def pos_height(pos: int) -> int:
-    return index_height(pos - 1)
-
 def peaks(s: int) -> List[int]:
     """Returns the peak indices for MMR(s)
 
