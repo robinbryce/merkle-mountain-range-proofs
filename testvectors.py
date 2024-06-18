@@ -1,13 +1,18 @@
-import hashlib
 
 """
 See the notational conventions in the accompanying draft text for definition of short hand variables.
 """
+import hashlib
 
-from algorithms import peaks
-from algorithms import index_height
 from algorithms import index_proof_path
+from algorithms import verify_inclusion_path
+from algorithms import index_height
+from algorithms import peaks
+from algorithms import peaks_bitmap
+from algorithms import peak_index
 from algorithms import complete_mmr_size
+from algorithms import hash_pospair64
+
 
 def hash_num64(v :int) -> bytes:
     """
@@ -19,25 +24,6 @@ def hash_num64(v :int) -> bytes:
         bytes: the SHA-256 hash of the big endian representation of v
     """
     return hashlib.sha256(v.to_bytes(8, byteorder='big', signed=False)).digest()
-
-def hash_pospair64(pos: int, vleft: bytes, vright: bytes) -> bytes:
-    """
-    Compute the hash of the node at pos, whose children have the values vleft and vright.
-
-    Args:
-        pos (int): the 1-based position of the parent of vleft, vright in the tree
-        vleft (bytes): the value of the left child of pos
-        vright (bytes): the value of the right child of pos
-
-    Returns:
-        The value for the node identified by pos
-    """
-    h = hashlib.sha256()
-    h.update(pos.to_bytes(8, byteorder='big', signed=False))
-    h.update(vleft)
-    h.update(vright)
-    return h.digest()
-
 
 class KatDB:
     def __init__(self):
@@ -177,10 +163,29 @@ def print_canonical39_accumulator_peaks(db=None):
 
 def print_canonical39_index_height():
 
-    print("|  i |  g |")
-    print("|:---|---:|")
-    for i in range(38):
-        print("|{:4}|{:4}|".format(i, index_height(i)))
+    # print("|  i |  g |")
+    # print("|:---|---:|")
+    heights = []
+    indices = []
+    heading = []
+    peakmaps = []
+    leafcounts = []
+    w = 5
+    for i in range(39):
+        indices.append(str(i).ljust(w, " "))
+        heading.append("-" * w)
+        heights.append(str(index_height(i)).ljust(w, " "))
+        peakmap = peaks_bitmap(i+1)
+        peakmaps.append(bin(peakmap)[2:].ljust(w, " "))
+        leafcounts.append(str(peakmap).ljust(w, " "))
+
+    print("|" + "|".join(indices) + "|")
+    print("|" + "|".join(heading) + "|")
+    print("|" + "|".join(heights) + "|")
+    print("|" + "|".join(leafcounts) + "|")
+    print("|" + "|".join(peakmaps) + "|")
+    # print("|{:4}|".format(index_height(i)))
+    # print("|{:4}|".format(i, index_height(i)))
 
 def print_canonical39_inclusion_paths():
     # note we produce inclusion paths for _all_ nodes
@@ -206,27 +211,90 @@ def print_canonical39_inclusion_paths():
 def print_canonical39_inclusion_paths2():
     # note we produce inclusion paths for _all_ nodes
 
-    print("|" + " i  " + "|" + " MMR  " + "|" + "inclusion path" + "|" + "accumulator" + "|")
-    print("|:" + "-".ljust(3, "-") + "|" + "-".ljust(3, "-") + ":|" + "-".ljust(20, "-") + "|" + "-".ljust(20, "-") + "|")
+    w1 = 4
+    w2 = 20
+
+    print("|" + " i  " + "|" + " MMR  " + "|" + "inclusion path" + "|" + "accumulator" + "|" + "accumulator root index" + "|")
+    print("|:" + "-".ljust(w1-1, "-") + "|" + "-".ljust(w1-1, "-") + ":|" + "-".ljust(w2, "-") + "|" + "-".ljust(w2, "-") + "|" + "-".ljust(w1, "-") + "|")
 
     for i in range(39):
         s = complete_mmr_size(i)
         while s < 39:
             accumulator = peaks(s)
             path = index_proof_path(s, i)
+            e = peaks_bitmap(s)
+
+            # for leaf nodes, the peak height is len(proof) - 1, for interiors, we need to take into account the height of the node.
+            g = len(path) + index_height(i)
+
+            accumulator_index = peak_index(e, g)
+
             spath = "[" + ", ".join([str(p) for p in path]) + "]"
 
             # it is very confusingif we list the accumulator as positions yet have the paths be indices. so lets not do that.
             saccumulator = "[" + ", ".join([str(p-1) for p in accumulator]) + "]"
         
-            print("|" + '{:4}'.format(i) + "|" + 'MMR({})'.format(s).ljust(7, " ") + "|" + spath.ljust(20, " ") + "|" + saccumulator.ljust(20, " ") + "|")
+            print("|" + '{:4}'.format(i) + "|" + 'MMR({})'.format(s).ljust(7, " ") + "|" + spath.ljust(w2, " ") + "|" + saccumulator.ljust(w2, " ") + "|" + str(accumulator_index).ljust(w1, " ") + "|")
  
             s = complete_mmr_size(s+1)
 
+
+def test_verification():
+    # Hand populate the db
+    db = KatDB()
+    db.init_canonical39()
+
+    # Show that index_proof_path verifies for all complete mmr's which include i
+    failcount = 0
+    for i in range(39):
+        s = complete_mmr_size(i)
+        while s < 39:
+
+            # typically, the size, accumulator and paths will be givens.
+            accumulator = [db.get(p-1) for p in peaks(s)]
+            saccumulator = [str(p-1) for p in peaks(s)]
+            path = [db.get(isibling) for isibling in index_proof_path(s, i)]
+            ipath = [str(isibling) for isibling in index_proof_path(s, i)]
+
+            e = peaks_bitmap(s)
+
+            # for leaf nodes, the peak height is len(proof) - 1,
+            # for interiors, we need to take into account the height of the node.
+            g = len(path) + index_height(i)
+
+            accumulator_index = peak_index(e, g)
+
+            ok, pathconsumed = False, 0
+
+            (ok, pathconsumed) = verify_inclusion_path(s, i, db.get(i), path, accumulator[accumulator_index])
+
+            if ok and pathconsumed == len(path):
+                print("|" + "OK".ljust(4, " ") + "|" + str(i).ljust(4, " ") + "|" + str(s).ljust(4, " ") + "|")
+            else:
+                print(
+                    "|" + "FAIL".ljust(4, " ") +
+                    "|" + str(i).ljust(4, " ") +
+                    "|" + str(s).ljust(4, " ") +
+                    "|[" + ", ".join(ipath) + "]" +
+                    "|" + str(accumulator_index).ljust(4, " ") + 
+                    "|[" + ", ".join(saccumulator) + "]")
+
+                failcount += 1
+                return
+
+            s = complete_mmr_size(s+1)
+
+    if failcount == 0:
+        print("OK")
+    else:
+        print("FAILED to verify %d" % failcount)
+
+
 import sys
 if __name__ == "__main__":
-    print_canonical39_inclusion_paths2()
+    test_verification()
     sys.exit(0)
+    print_canonical39_inclusion_paths2()
     print_canonical39_index_height()
     db = KatDB()
     db.init_canonical39()
