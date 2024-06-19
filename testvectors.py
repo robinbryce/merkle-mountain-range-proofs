@@ -4,6 +4,8 @@ See the notational conventions in the accompanying draft text for definition of 
 """
 import hashlib
 
+from algorithms import consistency_proof
+from algorithms import verify_consistency
 from algorithms import index_proof_path
 from algorithms import verify_inclusion_path
 from algorithms import index_height
@@ -251,7 +253,7 @@ def print_canonical39_inclusion_paths2():
             s = complete_mmr_size(s+1)
 
 
-def test_verification():
+def test_verify_inclusion():
     # Hand populate the db
     db = KatDB()
     db.init_canonical39()
@@ -302,11 +304,41 @@ def test_verification():
         print("FAILED to verify %d" % failcount)
 
 
+def test_verify_consistency():
+
+    # Hand populate the db
+    db = KatDB()
+    db.init_canonical39()
+
+    for stride in range(int(39/2)):
+        stride = (stride + 1)
+        sizea = 1
+        sizeb = complete_mmr_size(min(sizea + stride, 39))
+
+        while sizeb <=39 and (sizeb - sizea > 0):
+            iproof = consistency_proof(sizea, sizeb)
+            proof = [db.get(i) for i in iproof]
+            iaacc = [p -1 for p in peaks(sizea)]
+            aacc = [db.get(i) for i in iaacc]
+            ibacc = [p - 1 for p in peaks(sizeb)]
+            bacc = [db.get(i) for i in ibacc]
+
+            ok = verify_consistency(sizea, sizeb, aacc, bacc, proof)
+            if not ok:
+                ok = verify_consistency(sizea, sizeb, aacc, bacc, proof)
+                print("FAILED: MMR(%d) -> MMR(%d)" % (sizea, sizeb))
+                return
+            print("OK: MMR(%d) -> MMR(%d)" % (sizea, sizeb))
+            sizea = complete_mmr_size(sizea + stride)
+            sizeb = complete_mmr_size(sizea + 2 *stride)
+
+
 import sys
 if __name__ == "__main__":
-    print_canonical39_inclusion_paths2()
+    test_verify_consistency()
     sys.exit(0)
-    test_verification()
+    print_canonical39_inclusion_paths2()
+    test_verify_inclusion()
     print_canonical39_index_height()
     db = KatDB()
     db.init_canonical39()

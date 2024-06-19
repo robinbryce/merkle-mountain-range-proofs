@@ -38,17 +38,30 @@ def verify_consistency(
     ok = False
     while ipeaka < len(aaccumulator):
         bpeak = bpeakpositions[ipeakb]
-        while apos  <= bpeak:
-            (ok, used) = verify_inclusion_path(
-                bsize, aaccumulator[ipeaka], apos-1,
-                path, baccumulator[ipeakb])
-            if not (ok or used > len(path)):
+
+        while apos <= bpeak:
+
+            if apos == bpeak:
+                ok = aaccumulator[ipeaka] == baccumulator[ipeakb]
+                # if ok:
+                #     print("ok: %s == %s" %(aaccumulator[ipeaka], baccumulator[ipeakb]))
+            else:
+                (ok, used) = verify_inclusion_path(
+                    bsize, apos-1, aaccumulator[ipeaka],
+                    path, baccumulator[ipeakb])
+                if used == 0 or used > len(path):
+                    return False
+                # print("ok: %d under %d, used %d" % (apos-1, bpeak-1, used))
+                path = path[used:]
+
+            if not ok:
                 return False
-            path = path[used:]
+
             ipeaka += 1
             if ipeaka == len(aaccumulator):
                 break
             apos = apeakpositions[ipeaka]
+
         ipeakb += 1
 
     return ok and len(path) == 0
