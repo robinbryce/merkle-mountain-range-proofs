@@ -274,6 +274,23 @@ Given,
     1. Goto #looptarget
 1. Return `i` to the caller
 
+```python
+def addleafhash(db, v: bytes) -> int:
+
+    g = 0
+    i = db.append(v)
+
+    while index_height(i) > g:
+
+        ileft = i - (2 << g)
+        iright = i - 1
+
+        i = db.append(hash_pospair64(i+1, db.get(ileft), db.get(iright)))
+        g += 1
+
+    return i
+```
+
 ### IndexProofPath(S, i)
 
 IndexProofPath is used to produce the verification paths for inclusion proofs and consistency proofs.

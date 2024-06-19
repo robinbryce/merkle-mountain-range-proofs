@@ -2,8 +2,10 @@
 """
 See the notational conventions in the accompanying draft text for definition of short hand variables.
 """
+import sys
 import hashlib
 
+from algorithms import addleafhash
 from algorithms import consistency_proof
 from algorithms import verify_consistency
 from algorithms import index_proof_path
@@ -14,6 +16,7 @@ from algorithms import peaks_bitmap
 from algorithms import peak_index
 from algorithms import complete_mmr_size
 from algorithms import hash_pospair64
+from algorithms import trailing_zeros
 
 
 def hash_num64(v :int) -> bytes:
@@ -27,7 +30,36 @@ def hash_num64(v :int) -> bytes:
     """
     return hashlib.sha256(v.to_bytes(8, byteorder='big', signed=False)).digest()
 
+class FlatDB:
+    """An implementation that satisfies the required interafce of addleafhash"""
+
+    def __init__(self):
+        self.store = []
+
+    def append(self, v):
+        self.store.append(v)
+        return len(self.store) # index of the *NEXT* item that will be added
+    
+    def get(self, i):
+        return self.store[i]
+    
+    def init_canonical39(self):
+        """Re-creates the kat db using addleafhash"""
+
+        for ileaf in range(peaks_bitmap(39)):
+
+            # we know its a leaf, and we know len(self.store) is a valid mmr size,
+            # so there is a short cut here for leaf index -> mmr index.
+            # the count of trailing zeros in the leaf index is also the number of nodes we will need to add
+            i = len(self.store)
+            # and even numbered leaves are always singleton peaks
+            if ileaf % 2:
+                i = i + trailing_zeros(ileaf)
+
+            addleafhash(self, hash_num64(i))
+
 class KatDB:
+    """A fixed size database for providing "known answers" """
     def __init__(self):
         # A map is used so we can build the tree in layers, with explicit put()
         # calls, for illustrative purposes In a more typical implementation,
@@ -43,9 +75,8 @@ class KatDB:
         self.store[i] = v
 
     def get(self, i) -> bytes:
-        return self.store[i]
-
-
+        return self.store[i] 
+    
     def init_canonical39(self):
         """
         Initialise the db to the canonical MMR(39) which is,
@@ -116,7 +147,7 @@ class KatDB:
         # height 4
         self.put(30, self.parent_hash(30, 14, 29))
 
-def print_canonical39_leaves():
+def print_kat_canonical39_leaves():
     db = KatDB()
     db.init_canonical39()
     print("|" + "  i " + "|" + "  e " + "|" + "|" + " "*(32-5-1) + "leaf values" + " "*(32-5))
@@ -127,14 +158,20 @@ def print_canonical39_leaves():
         i = leaf_indices[e]
         print("|" + '{:4}'.format(i) + "|" + '{:4}'.format(e) + "|" + db.store[i].hex() + "|")
 
-def print_canonical39():
+def print_db(*dbs):
+    print(("|" + " i  " + "|" + " "*(32-5-1) + "node values" + " "*(32-5) + "|") * len(dbs))
+    print(("|" + "-"*3 + ":|" + "-"*64 + "|") * len(dbs))
+
+    for i in range(39):
+        for db in dbs:
+            sys.stdout.write("|" + '{:4}'.format(i) + "|" + db.store[i].hex() + "|")
+        sys.stdout.write("\n")
+
+def print_kat_canonical39():
     db = KatDB()
     db.init_canonical39()
+    print_db(db)
 
-    print("|" + " i  " + "|" + " "*(32-5-1) + "node values" + " "*(32-5) + "|")
-    print("|" + "-"*3 + ":|" + "-"*64 + "|")
-    for i in range(39):
-        print("|" + '{:4}'.format(i) + "|" + db.store[i].hex() + "|")
 
 def print_canonical39_accumulator_peaks(db=None):
     # there is a complete mmr for each leaf
@@ -210,7 +247,7 @@ def print_canonical39_inclusion_paths():
         
         print("|" + '{:4}'.format(i) + "|" + 'MMR({})'.format(s).ljust(7, " ") + "|" + spath.ljust(20, " ") + "|" + saccumulator.ljust(20, " ") + "|" + spath_39.ljust(20, " ") + "|" + smax_accumulator.ljust(20, " ") + "|")
 
-def print_canonical39_inclusion_paths2():
+def print_kat_canonical39_inclusion_paths2():
     # note we produce inclusion paths for _all_ nodes
 
     # so we can print the roots
@@ -333,19 +370,45 @@ def test_verify_consistency():
             sizeb = complete_mmr_size(sizea + 2 *stride)
 
 
+def test_add():
+    db = FlatDB()
+    db.init_canonical39()
+
+    failed = 0
+    katdb = KatDB()
+    katdb.init_canonical39()
+    for i in range(len(db.store)):
+        if db.store[i] != katdb.store[i]:
+            print("%d: %s vs %s" % (i, db.store[i].hex(), katdb.store[i].hex()))
+            failed += 1
+    if failed == 0:
+        print("OK")
+        return
+    print("FAILED")
+
 import sys
 if __name__ == "__main__":
-    test_verify_consistency()
+    test_add()
     sys.exit(0)
-    print_canonical39_inclusion_paths2()
+    db = FlatDB()
+    db.init_canonical39()
+
+    failed = 0
+    katdb = KatDB()
+    katdb.init_canonical39()
+
+    print_db(db, katdb)
+
+    test_verify_consistency()
+    print_kat_canonical39_inclusion_paths2()
     test_verify_inclusion()
     print_canonical39_index_height()
     db = KatDB()
     db.init_canonical39()
     print_canonical39_accumulator_peaks(db=db)
-    print_canonical39_leaves()
+    print_kat_canonical39_leaves()
     print()
-    print_canonical39()
+    print_kat_canonical39()
     print()
     print_canonical39_accumulator_peaks()
-    # print_canonical39_accumulator_peaks(as_indices=True)
+    print_canonical39_accumulator_peaks(as_indices=True)

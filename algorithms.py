@@ -1,6 +1,35 @@
 from typing import List, Tuple
 import hashlib
 
+def addleafhash(db, v: bytes) -> int:
+    """Adds the leaf hash value v to the tree.
+
+    Interior nodes are added as necessary to for a complete MMR.
+
+    Args:
+        db: an interface providing the required append and get methods.
+            - append MUST return the index for the NEXT item to be added, and make the
+              value added available to subsequent get calls in the same invocation.
+            - get MUST return the requested value or raise an exception
+        v (bytes): the leaf hash value entry to add
+    Returns:
+        (int): The index of the last node added to the tree.
+    """
+
+    g = 0
+    i = db.append(v)
+
+    while index_height(i) > g:
+
+        left = db.get(i - (2 << g))
+        right = db.get(i - 1)
+
+        i = db.append(hash_pospair64(i+1, left, right))
+        g += 1
+
+    return i
+
+
 def consistency_proof(asize: int, bsize: int) -> List[int]:
     """Returns a proof of consistency between the MMR's identified by asize and bsize.
 
@@ -65,7 +94,6 @@ def verify_consistency(
         ipeakb += 1
 
     return ok and len(path) == 0
-
 
 
 def verify_inclusion_path(s: int, i: int, nodehash: bytes, proof: List[bytes], root: bytes) -> Tuple[bool, int]:
@@ -236,7 +264,7 @@ def trailing_zeros(v: int) -> int:
     return (v & -v).bit_length() - 1
 
 
-# generally useful helpers for the testvectors
+# generally useful helpers for the tests and for producing the kat tables
 
 def hash_pospair64(pos: int, a: bytes, b: bytes) -> bytes:
     """
