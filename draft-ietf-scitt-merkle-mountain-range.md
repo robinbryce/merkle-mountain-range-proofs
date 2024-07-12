@@ -475,7 +475,7 @@ def verify_consistency(
         bpeak = bpeakpositions[ipeakb]
         while apos  <= bpeak:
             (ok, used) = verify_inclusion_path(
-                bsize, aaccumulator[ipeaka], apos-1,
+                aaccumulator[ipeaka], apos-1,
                 path, baccumulator[ipeakb])
             if not (ok or used > len(path)):
                 return False
