@@ -190,36 +190,36 @@ def consistency_proof(ia: int, ib: int) -> List[int]:
 
 
 def verify_consistency(
-    ia: int,
-    ib: int,
-    aaccumulator: List[bytes],
-    baccumulator: List[bytes],
+    ifrom: int,
+    ito: int,
+    accumulatorfrom: List[bytes],
+    accumulatorto: List[bytes],
     path: List[bytes],
 ) -> bool:
     """ """
-    apeakpositions = [i+1 for i in peaks(ia)]
-    bpeakpositions = [i+1 for i in peaks(ib)]
+    frompeaks = peaks(ifrom)
+    topeaks = peaks(ito)
 
-    if len(aaccumulator) != len(apeakpositions):
+    if len(accumulatorfrom) != len(frompeaks):
         return False
 
-    if len(baccumulator) != len(bpeakpositions):
+    if len(accumulatorto) != len(topeaks):
         return False
 
-    ipeaka = ipeakb = 0
+    ipeakfrom = ipeakto = 0
 
-    apos = apeakpositions[ipeaka]
+    ia = frompeaks[ipeakfrom]
 
     ok = False
-    while ipeaka < len(aaccumulator):
-        bpeak = bpeakpositions[ipeakb]
+    while ipeakfrom < len(accumulatorfrom):
+        ib = topeaks[ipeakto]
 
-        while apos <= bpeak:
-            if apos == bpeak:
-                ok = aaccumulator[ipeaka] == baccumulator[ipeakb]
+        while ia <= ib:
+            if ia == ib:
+                ok = accumulatorfrom[ipeakfrom] == accumulatorto[ipeakto]
             else:
                 (ok, used) = verify_inclusion_path(
-                    apos - 1, aaccumulator[ipeaka], path, baccumulator[ipeakb]
+                    ia, accumulatorfrom[ipeakfrom], path, accumulatorto[ipeakto]
                 )
                 if used == 0 or used > len(path):
                     return False
@@ -228,12 +228,12 @@ def verify_consistency(
             if not ok:
                 return False
 
-            ipeaka += 1
-            if ipeaka == len(aaccumulator):
+            ipeakfrom += 1
+            if ipeakfrom == len(accumulatorfrom):
                 break
-            apos = apeakpositions[ipeaka]
+            ia = frompeaks[ipeakfrom]
 
-        ipeakb += 1
+        ipeakto += 1
 
     return ok and len(path) == 0
 
