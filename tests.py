@@ -211,7 +211,7 @@ class TestVerifyInclusion(unittest.TestCase):
             s = complete_mmr_size(i)
             while s < 39:
                 # typically, the size, accumulator and paths will be givens.
-                accumulator = [db.get(p - 1) for p in peaks(s)]
+                accumulator = [db.get(ip) for ip in peaks(s-1)]
                 path = [db.get(isibling) for isibling in inclusion_proof_path(i, s-1)]
 
                 e = leaf_count(s)
@@ -263,9 +263,9 @@ class TestVerifyConsistency(unittest.TestCase):
             while ib <= 39 and (ib - ia > 0):
                 iproof = consistency_proof(ia, ib)
                 proof = [db.get(i) for i in iproof]
-                iaacc = [p - 1 for p in peaks(ia+1)]
+                iaacc = [ip for ip in peaks(ia)]
                 aacc = [db.get(i) for i in iaacc]
-                ibacc = [p - 1 for p in peaks(ib+1)]
+                ibacc = [ip for ip in peaks(ib)]
                 bacc = [db.get(i) for i in ibacc]
 
                 ok = verify_consistency(ia, ib, aacc, bacc, proof)

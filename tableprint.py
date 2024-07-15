@@ -91,7 +91,7 @@ def peaks_table(db=None):
     rows = []
     for i in range(len(complete_mmrs)):
         s = complete_mmrs[i]
-        peak_values = peaks(s)  # returns a list of positions, not indices
+        peak_values = [i+1 for i in peaks(s-1)]  # returns a list of positions, not indices
         if db:
             rows.append([db.get(p - 1).hex() for p in peak_values])
             continue
@@ -163,10 +163,10 @@ def print_index_height(mmrsize=39):
 def minmax_inclusion_path_table(mmrsize=39):
 
     rows = []
-    max_accumulator = peaks(mmrsize)
+    max_accumulator = [ip+1 for ip in peaks(mmrsize-1)]
     for i in range(mmrsize):
         s = complete_mmr_size(i)
-        accumulator = [p-1 for p in peaks(s)]
+        accumulator = [ip for ip in peaks(s-1)]
         path = inclusion_proof_path(i, s - 1)
         path_maxsz = inclusion_proof_path(i, mmrsize-1)
 
@@ -238,7 +238,7 @@ def inclusion_paths_table(mmrsize=39):
     for i in range(mmrsize):
         s = complete_mmr_size(i)
         while s < mmrsize:
-            accumulator = [p-1 for p in peaks(s)]
+            accumulator = [ip for ip in peaks(s-1)]
             path = inclusion_proof_path(i, s-1)
             e = leaf_count(s)
 

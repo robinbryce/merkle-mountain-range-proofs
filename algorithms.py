@@ -179,12 +179,12 @@ def consistency_proof(ia: int, ib: int) -> List[int]:
     The returned path is the concatenation of the inclusion proofs
     authenticating the peaks of MMR(a) in MMR(b)
     """
-    apeaks = peaks(ia+1)
+    apeaks = peaks(ia)
 
     proof = []
 
-    for apos in apeaks:
-        proof.extend(inclusion_proof_path(apos - 1, ib))
+    for ipeak in apeaks:
+        proof.extend(inclusion_proof_path(ipeak, ib))
 
     return proof
 
@@ -197,8 +197,8 @@ def verify_consistency(
     path: List[bytes],
 ) -> bool:
     """ """
-    apeakpositions = peaks(ia+1)
-    bpeakpositions = peaks(ib+1)
+    apeakpositions = [i+1 for i in peaks(ia)]
+    bpeakpositions = [i+1 for i in peaks(ib)]
 
     if len(aaccumulator) != len(apeakpositions):
         return False
@@ -248,20 +248,21 @@ def index_height(i: int) -> int:
     return pos.bit_length() - 1
 
 
-def peaks(s: int) -> List[int]:
-    """Returns the peak indices for MMR(s)
+def peaks(i: int) -> List[int]:
+    """Returns the peak indices for MMR(i)
 
-    Assumes MMR(s) is complete, implementations can check for this condition by
-    testing the height of s+1
+    Assumes MMR(i) is complete, implementations can check for this condition by
+    testing the height of i+1
     """
 
     peak = 0
     peaks = []
+    s = i+1
     while s != 0:
         # find the highest peak size in the current MMR(s)
         highest_size = (1 << ((s + 1).bit_length() - 1)) - 1
         peak = peak + highest_size
-        peaks.append(peak)
+        peaks.append(peak-1)
         s -= highest_size
 
     return peaks
