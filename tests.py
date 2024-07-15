@@ -283,26 +283,25 @@ class TestWitnessUpdate(unittest.TestCase):
 
         t_max = leaf_count(mmrsize)
 
-        for ix in range(mmrsize):
-            tx = leaf_count(ix)
+        for iw in range(mmrsize):
+            tw = leaf_count(iw)
 
             row0 = []
             row1 = []
             row2 = []
             wits = []
 
-            for tw in range(tx, t_max):
-                iw = mmr_index(tw)
-                sw = complete_mmr_size(iw)
+            for tx in range(tw, t_max):
+                ix = complete_mmr(mmr_index(tx))
                 # dsw = index_height(sw - 1)
                 # depth of the proof for ix against the accumulator sw
-                dsw = len(inclusion_proof_path(ix, sw-1))
+                dsw = len(inclusion_proof_path(iw, ix))
                 # row0.append(tx)
-                row0.append(next_proof(ix, dsw))
+                row0.append(next_proof(iw, dsw))
                 # additions until burried, and also until its witness next needs updating
                 row1.append(dsw)
 
-                w = inclusion_proof_path(ix, sw-1)
+                w = inclusion_proof_path(iw, ix)
                 if wits:
                     self.assertGreaterEqual(len(w), len(wits[-1]))
                     # The old witness is a strict subset of the new witness
@@ -310,18 +309,18 @@ class TestWitnessUpdate(unittest.TestCase):
 
                     # check that the previous witness is updated by the inclusion proof for its previous accumulator root
 
-                    ioldroot_by_parent = len(wits[-1]) and parent(wits[-1][-1]) or ix
+                    ioldroot_by_parent = len(wits[-1]) and parent(wits[-1][-1]) or iw
                     ioldroot = accumulator_root(
-                        complete_mmr_size(mmr_index(tw - 1)), ix
+                        complete_mmr_size(mmr_index(tx - 1)), iw
                     )
 
                     self.assertEqual(ioldroot_by_parent, ioldroot)
 
-                    wupdated = wits[-1] + inclusion_proof_path(ioldroot, sw-1)
+                    wupdated = wits[-1] + inclusion_proof_path(ioldroot, ix)
 
                     self.assertEqual(wupdated, w)
 
-                row2.append(wits and wits[-1] and wits[-1][-1] or ix)
+                row2.append(wits and wits[-1] and wits[-1][-1] or iw)
 
                 wits.append(w)
 
