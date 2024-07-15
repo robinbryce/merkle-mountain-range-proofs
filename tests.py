@@ -14,10 +14,11 @@ from algorithms import index_height
 from algorithms import accumulator_index
 from algorithms import peaks
 from algorithms import leaf_count
-from algorithms import next_proof
 from algorithms import parent
 from algorithms import accumulator_root
 from algorithms import complete_mmr_size
+from algorithms import next_proof
+from algorithms import complete_mmr
 
 from tableprint import complete_mmrs
 from tableprint import peaks_table
@@ -27,7 +28,7 @@ from tableprint import inclusion_paths_table
 from db import KatDB, FlatDB
 
 
-class TestIndexOpterations(unittest.TestCase):
+class TestIndexOperations(unittest.TestCase):
     """
     Tests for the various algorithms that work on mmr indexes and leaf indexes,
     with out reference to a materialized tree.
@@ -211,7 +212,7 @@ class TestVerifyInclusion(unittest.TestCase):
             while s < 39:
                 # typically, the size, accumulator and paths will be givens.
                 accumulator = [db.get(p - 1) for p in peaks(s)]
-                path = [db.get(isibling) for isibling in inclusion_proof_path(s, i)]
+                path = [db.get(isibling) for isibling in inclusion_proof_path(i, s-1)]
 
                 e = leaf_count(s)
 
@@ -256,24 +257,25 @@ class TestVerifyConsistency(unittest.TestCase):
 
         for stride in range(int(39 / 2)):
             stride = stride + 1
-            sizea = 1
-            sizeb = complete_mmr_size(min(sizea + stride, 39))
+            ia = 0
+            ib = complete_mmr(min(ia + stride, 38))
 
-            while sizeb <= 39 and (sizeb - sizea > 0):
-                iproof = consistency_proof(sizea, sizeb)
+            while ib <= 39 and (ib - ia > 0):
+                iproof = consistency_proof(ia, ib)
                 proof = [db.get(i) for i in iproof]
-                iaacc = [p - 1 for p in peaks(sizea)]
+                iaacc = [p - 1 for p in peaks(ia+1)]
                 aacc = [db.get(i) for i in iaacc]
-                ibacc = [p - 1 for p in peaks(sizeb)]
+                ibacc = [p - 1 for p in peaks(ib+1)]
                 bacc = [db.get(i) for i in ibacc]
 
-                ok = verify_consistency(sizea, sizeb, aacc, bacc, proof)
+                ok = verify_consistency(ia, ib, aacc, bacc, proof)
                 self.assertTrue(ok)
-                sizea = complete_mmr_size(sizea + stride)
-                sizeb = complete_mmr_size(sizea + 2 * stride)
+                ia = complete_mmr(ia + stride)
+                ib = complete_mmr(ia + 2 * stride)
 
 
 class TestWitnessUpdate(unittest.TestCase):
+
     def test_witness_update(self):
         """Each witness is a prefix of all future witnesses for the same entry"""
 
@@ -294,13 +296,13 @@ class TestWitnessUpdate(unittest.TestCase):
                 sw = complete_mmr_size(iw)
                 # dsw = index_height(sw - 1)
                 # depth of the proof for ix against the accumulator sw
-                dsw = len(inclusion_proof_path(sw, ix))
+                dsw = len(inclusion_proof_path(ix, sw-1))
                 # row0.append(tx)
                 row0.append(next_proof(ix, dsw))
                 # additions until burried, and also until its witness next needs updating
                 row1.append(dsw)
 
-                w = inclusion_proof_path(sw, ix)
+                w = inclusion_proof_path(ix, sw-1)
                 if wits:
                     self.assertGreaterEqual(len(w), len(wits[-1]))
                     # The old witness is a strict subset of the new witness
@@ -315,7 +317,7 @@ class TestWitnessUpdate(unittest.TestCase):
 
                     self.assertEqual(ioldroot_by_parent, ioldroot)
 
-                    wupdated = wits[-1] + inclusion_proof_path(sw, ioldroot)
+                    wupdated = wits[-1] + inclusion_proof_path(ioldroot, sw-1)
 
                     self.assertEqual(wupdated, w)
 

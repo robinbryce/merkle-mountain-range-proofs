@@ -1,41 +1,20 @@
 from algorithms import inclusion_proof_path
+from algorithms import inclusion_proof_path2
 from algorithms import index_height
 from algorithms import peaks
 from algorithms import leaf_count
 from algorithms import complete_mmr_size
 from algorithms import mmr_index
 from algorithms import parent
-from algorithms import next_proof, next_leaf_proof
+from algorithms import roots
+from algorithms import leaf_witness_update_due
 from algorithms import accumulator_root
 from algorithms import accumulator_index
 
 
 from db import KatDB, FlatDB
 
-complete_mmrs = [
-    1,
-    3,
-    4,
-    7,
-    8,
-    10,
-    11,
-    15,
-    16,
-    18,
-    19,
-    22,
-    23,
-    25,
-    26,
-    31,
-    32,
-    34,
-    35,
-    38,
-    39,
-]
-
+complete_mmrs = [ 1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38, 39 ]
 
 def kat39_leaf_table():
     """Returns a row for each leaf entry [mmrIndex, leafIndex, leafHash]"""
@@ -188,12 +167,13 @@ def minmax_inclusion_path_table(mmrsize=39):
     for i in range(mmrsize):
         s = complete_mmr_size(i)
         accumulator = [p-1 for p in peaks(s)]
-        path = inclusion_proof_path(s, i)
-        path_maxsz = inclusion_proof_path(mmrsize, i)
+        path = inclusion_proof_path(i, s - 1)
+        path_maxsz = inclusion_proof_path(i, mmrsize-1)
 
         rows.append([i, s, path, accumulator, path_maxsz, max_accumulator])
 
     return rows
+
 
 def print_minmax_inclusion_paths(mmrsize=39):
     # note we produce inclusion paths for _all_ nodes
@@ -259,7 +239,7 @@ def inclusion_paths_table(mmrsize=39):
         s = complete_mmr_size(i)
         while s < mmrsize:
             accumulator = [p-1 for p in peaks(s)]
-            path = inclusion_proof_path(s, i)
+            path = inclusion_proof_path(i, s-1)
             e = leaf_count(s)
 
             # for leaf nodes, the peak height is len(proof) - 1, for interiors, we need to take into account the height of the node.
@@ -342,6 +322,101 @@ def print_inclusion_paths(mmrsize=39):
             + "|"
         )
 
+def getreleventindices(lastupdateidx, previdx, d):
+    """
+    Returns a list of indices of relevent updates, given:
+        lastupdateidx: the index at which the last witness update occurred
+        previdx: the index at which the last accumulator update occurred
+        d: the depth of the current witness
+
+
+    NOTICE:
+
+    This is the python implemementation of "GetUpdateTimeSteps" from
+    "Efficient Asynchronous Accumulators for Distributed PKI"
+    -  https://eprint.iacr.org/2015/718.pdf
+
+
+    This python code was provided by Sophia Yakoubov (an author on that paper)
+    """
+    releventindices = []
+    power = 2 ** d
+    releventindex = lastupdateidx + power
+    while releventindex <= previdx:
+        releventindices.append(releventindex)
+        while releventindex % (power * 2) == 0:
+            power = power * 2
+        releventindex += power
+    return releventindices
+
+
+def node_witness_update_tables(mmrsize=39):
+
+    rows = []
+    tmax = leaf_count(mmrsize)
+
+    for tw in range(tmax):
+        iw = mmr_index(tw)
+        sw = complete_mmr_size(iw)
+        dw = len(inclusion_proof_path(iw, sw-1))
+        for tx in range(tw+1, tmax):
+            leaf_indices = getreleventindices(tw, tx, dw)
+            rows.append([iw, tw, tx, "reysop", leaf_indices])
+            ix = mmr_index(tx)
+            sx = complete_mmr_size(ix)
+            leaf_indices_mmriver = leaf_index_updates(tw, tx, dw)
+            rows.append([iw, tw, tx, "mmrive", leaf_indices_mmriver])
+
+    return rows
+
+def vgetreleventindices(lastupdateidx, previdx, d):
+    """
+    Returns a list of indices of relevent updates, given:
+        lastupdateidx: the index at which the last witness update occurred
+        previdx: the index at which the last accumulator update occurred
+        d: the depth of the current witness
+
+
+    NOTICE:
+
+    This is the python implemementation of "GetUpdateTimeSteps" from
+    "Efficient Asynchronous Accumulators for Distributed PKI"
+    -  https://eprint.iacr.org/2015/718.pdf
+
+
+    This python code was provided by Sophia Yakoubov (an author on that paper)
+    """
+    releventindices = []
+    power = 2 ** d
+    releventindex = lastupdateidx + power
+
+    print(f":d={d} lupi={lastupdateidx} pow={power} ri={releventindex}")
+    while releventindex <= previdx:
+        releventindices.append(releventindex)
+        print(f"  releventindices: {releventindices} <- {releventindex}")
+        while releventindex % (power * 2) == 0:
+            print(f"    ri={releventindex} pow: {power}->{power *2}")
+            power = power * 2
+        releventindex += power
+    print(f":{releventindices}")
+    print(f":{[mmr_index(i) for i in releventindices]}")
+
+    return releventindices
+
+def print_reysop():
+    ri_reysop = vgetreleventindices(0, 8, 0)
+    print("--")
+    ri_mmriver = leaf_index_updates(0, 8, 0)
+    print(ri_reysop)
+    print(ri_mmriver)
+
+
+def print_witness_updates(mmrsize=39):
+
+    rows = node_witness_update_tables(mmrsize=mmrsize)
+    for row in rows:
+        print(row)
+
 
 def print_node_witness_longevity(mmrsize=39):
     # time in the mmr is measured in terms of discrete leaf additions.  this is
@@ -379,13 +454,13 @@ def print_node_witness_longevity(mmrsize=39):
             sw = complete_mmr_size(iw)
             # dsw = index_height(sw - 1)
             # depth of the proof for ix against the accumulator sw
-            dsw = len(inclusion_proof_path(sw, ix))
+            dsw = len(inclusion_proof_path(ix, sw-1))
             # row0.append(tx)
-            row0.append(next_proof(ix, dsw))
+            row0.append(index_witness_update_due(ix, dsw))
             # additions until burried, and also until its witness next needs updating
             row1.append(dsw)
 
-            w = inclusion_proof_path(sw, ix)
+            w = inclusion_proof_path(ix, sw-1)
             if wits:
                 assert len(w) >= len(wits[-1])
                 for i in range(len(wits[-1])):
@@ -399,7 +474,7 @@ def print_node_witness_longevity(mmrsize=39):
                     ioldroot_by_parent == ioldroot
                 ), f"{ioldroot_by_parent} != {ioldroot}"
 
-                wupdated = wits[-1] + inclusion_proof_path(sw, ioldroot)
+                wupdated = wits[-1] + inclusion_proof_path(ioldroot, sw-1)
                 for i in range(len(wupdated)):
                     assert wupdated[i] == w[i]
 
@@ -437,229 +512,67 @@ def print_node_witness_longevity(mmrsize=39):
                 "|{tx: >2d} {ix: >2d}|{row:s}".format(tx=tx, ix=ix, row="|".join(srow2))
             )
 
-
-def xprint_leaf_witness_longevity(mmrsize=39):
-    t_max = leaf_count(mmrsize)
-    print("| ta|{tw:s}".format(tw="|".join(["--" for i in range(t_max)])))
-    print(
-        "|tx |{tw:s}".format(tw="|".join([str(i).rjust(2, " ") for i in range(t_max)]))
-    )
-    print("|---|{tw:s}".format(tw="|".join(["--" for i in range(t_max)])))
-
-    for tx in range(t_max):
-        ix = mmr_index(tx)
-        sx = complete_mmr_size(ix)
-
-        dsx = len(inclusion_proof_path(sx, ix))
-        assert dsx == index_height(sx - 1)
-
-        row0 = []
-        row1 = []
-        row2 = []
-        wits = []
-
-        for tw in range(tx, t_max):
-            iw = mmr_index(tw)
-            sw = complete_mmr_size(iw)
-            dsw = index_height(sw - 1)
-            # depth of the proof for ix against the accumulator sw
-            w = inclusion_proof_path(sw, ix)
-            if wits:
-                assert len(w) == len(wits[-1]) + 0
-                for i in range(len(wits[-1])):
-                    assert wits[-1][i] == w[i]
-
-            wits.append(w)
-
-            dsw = len(inclusion_proof_path(sw, ix))
-            # elementcount = peaks_bitmap(sw)
-            # x = elementcount.bit_length() - most_sig_bit(elementcount)
-            # assert dsw == x, f"{dsw} != {x}"
-
-            # element count for a single binary tree is 1 << g
-            # (it is necessary to sum them all to get the element count in the mmr, and that is just the peak bits)
-            ec = 1 << dsw
-
-            # leaf index local to its single binary tree
-            te = tx % ec
-
-            row0.append(next_leaf_proof(tx, sw, dsw))
-            row1.append(next_proof(ix, dsw))
-            # additions until burried, and also until its witness next needs updating
-            # row2.append()
-
-        if row0:
-            srow0 = ["  " for i in range(t_max - len(row0))]
-            srow0.extend([str(t).rjust(2, " ") for t in row0])
-        if row1:
-            srow1 = ["  " for i in range(t_max - len(row1))]
-            srow1.extend([str(t).rjust(2, " ") for t in row1])
-        if row2:
-            srow2 = ["  " for i in range(t_max - len(row2))]
-            srow2.extend([str(t).rjust(2, " ") for t in row2])
-
-        if row0:
-            print("| {tx: >2d}|{row:s}".format(tx=tx, row="|".join(srow0)))
-        if row1:
-            print("| {tx: >2d}|{row:s}".format(tx=tx, row="|".join(srow1)))
-        if row2:
-            print("| {tx: >2d}|{row:s}".format(tx=tx, row="|".join(srow2)))
-
-    return
-
-    for tx in range(t_max):
-        if False:
-            i = mmr_index(tx)
-            s = complete_mmr_size(i)
-            d = len(inclusion_proof_path(s, i))
-
-            blen = tx.bit_length()
-            bcnt = tx.bit_count()
-
-            row = f"{tx: >2d} {i: >2d} {s: >2d} {d: >2d}"
-
-            theight = (2 << tx.bit_length()) - 1
-            dheight = (2 << d) - 1
-
-            dnext = complete_mmr_size(s + dheight) - 1
-            # uptimes = reyzin_uptimes(mmr_index(tx), mmr_index(t_max), d)
-            uptimes = reyzin_uptimes(tx, t_max, d + 1)
-            suptimes = ", ".join([str(t).rjust(2, " ") for t in uptimes])
-            supindices = ", ".join([str(mmr_index(t)).rjust(2, " ") for t in uptimes])
-
-            print(
-                # f"{row: <9s}: ({blen:d}, {bcnt:d}), (2 << {blen:d}) - 1 = {theight: >2d}, (2 << ({d:d} + 1)) - 1 = {dheight: >2d}, {dnext: >2d}"
-                f"{row: <9s}: {dnext: >2d}, [{suptimes:s}]"
-            )
-            continue
-
-        lowd = []
-        firstvalid = []
-        validity = []
-        expires = []
-        dexpires = []
-        lenproofs = []  # d list
-        wbitlens = []  # d list
-
-        for ta in range(tx, t_max):
-            # lower bound d as log base 2 (tx - tw)
-            if True or ta != tx:
-                # lowd.append((ta - tx).bit_length() - 1)
-                # d = (ta - tx + 1).bit_length() - 1
-                # d = max(1, ta - tx)
-                # d = d.bit_length() - 1
-                d = (ta - tx + 1).bit_length() - 1
-                lowd.append((1 << d) - 1)
-
-            i = mmr_index(tx)
-            s = mmr_index(ta) + 1
-            d = len(inclusion_proof_path(s, i))
-
-            mi = (2 << d) - 2
-
-            # expires.append(mmr_index(tw + (1<<d)))
-            # because the accumulator root for tw has h = tw.bit_length()
-            expires.append((2 << ta.bit_length()) - 1)
-            wbitlens.append(ta.bit_length() - 1)
-            lenproofs.append(d)
-            dexpires.append((2 << (d + 1)) - 1)
-            # validity.append(dexpires[-1] - i + 1)
-            validity.append(expires[-1] - s + 1)
-
-            firstvalid.append((tx + ta) >> 1)
-
-        slowd = ["  " for i in range(t_max - len(lowd))]
-        slowd.extend([str(t).rjust(2, " ") for t in lowd])
-
-        sfirst = ["  " for i in range(t_max - len(firstvalid))]
-        sfirst.extend([str(t).rjust(2, " ") for t in firstvalid])
-
-        sexpires = ["  " for i in range(t_max - len(expires))]
-        sexpires.extend([str(n).rjust(2, " ") for n in expires])
-
-        svalidity = ["  " for i in range(t_max - len(validity))]
-        svalidity.extend([str(n).rjust(2, " ") for n in validity])
-
-        sdexpires = ["  " for i in range(t_max - len(dexpires))]
-        sdexpires.extend([str(n).rjust(2, " ") for n in dexpires])
-
-        swbitlens = ["  " for i in range(t_max - len(wbitlens))]
-        swbitlens.extend([str(d).rjust(2, " ") for d in wbitlens])
-
-        slenproofs = ["  " for i in range(t_max - len(lenproofs))]
-        slenproofs.extend([str(d).rjust(2, " ") for d in lenproofs])
-
-        print("| {tx: >2d}|{lowd:s}".format(tx=tx, lowd="|".join(slowd)))
-
-        continue
-        print("| {tx: >2d}|{tfirst:s}".format(tx=tx, tfirst="|".join(sfirst)))
-
-        print("| {tx: >2d}|{expires:s}".format(tx=tx, expires="|".join(sexpires)))
-        print("| {tx: >2d}|{validity:s}".format(tx=tx, validity="|".join(sdexpires)))
-        print("| {tx: >2d}|{validity:s}".format(tx=tx, validity="|".join(svalidity)))
-        print("|d{tx: >2d}|{d:s}".format(tx=tx, d="|".join(swbitlens)))
-
-        print("|d{tx: >2d}|{d:s}".format(tx=tx, d="|".join(slenproofs)))
-
-    return
-    for i in range(mmrsize):
-        g = index_height(i)
-        if g != 0:
-            continue
-
-        useleaves = True
-        if useleaves:
-            tx = leaf_count(i)
-            validity = []
-            for ta in range(tx, t_max):
-                validity.append((2 * ta) - tx)
-            dexpires = []
-            dproof = []
-            s = complete_mmr_size(i + 1)
-            s = complete_mmr_size(i + 1)
-            while s <= mmrsize:
-                ta = leaf_count(s)
-                d = len(inclusion_proof_path(s, i))
-                dexpires.append(ta + (1 << d))
-                dproof.append(d)
-                s = complete_mmr_size(s + 1)
-
-        sdproof = ["  " for i in range(t_max - len(dproof))]
-        sdproof.extend([str(d).rjust(2, " ") for d in dproof])
-        svalidity = ["  " for i in range(t_max - len(validity))]
-        svalidity.extend([str(n).rjust(2, " ") for n in validity])
-
-        sdexpires = ["  " for i in range(t_max - len(dexpires))]
-        sdexpires.extend([str(n).rjust(2, " ") for n in dexpires])
-
-        print("| {tx: >2d}|{validity:s}".format(tx=tx, validity="|".join(svalidity)))
-        print("| {tx: >2d}|{validity:s}".format(tx=tx, validity="|".join(sdexpires)))
-        print("|d{tx: >2d}|{d:s}".format(tx=tx, d="|".join(sdproof)))
-
-        continue
-
-        g = index_height(i)
-        if g != 0:
-            continue
-
-        print(
-            "i:{i:02d} z:{sz:02d} g:{log:d} x:{x:02d}".format(
-                i=i,
-                sz=complete_mmr_size(i),
-                log=(i + 2).bit_length() - 1,
-                x=(1 << ((i + 2).bit_length() - 0)) - 2,
-            )
-        )
-
-
-def _print_mmr_indices(leaves: int):
-    print("|".join([str(e).rjust(2, " ") for e in range(leaves)]))
-    print("|".join([str(mmr_index(e)).rjust(2, " ") for e in range(leaves)]))
-
+def basesz(sz):
+    # math.floor(math.log2(sz))
+    return sz.bit_length() - 1
 
 import sys
 
 if __name__ == "__main__":
+
+    def s(i): return str(i).rjust(2, " ")
+    def j(l): return ", ".join(l)
+
+    leaf_mmrindices = [0,   1, 3,   4,  7,   8, 10,  11, 15,  16, 18,  19, 22,  23,   25,   26,  31,  32,   34,  35,   38]
+    leaf_positions = [i+1 for i in leaf_mmrindices]
+
+    rows = []
+
+    def s(v): return str(v).rjust(2, " ")
+    def seqs(seq): return "[" + ", ".join([str(e).rjust(2, " ") for e in seq]) + "]"
+
+    for m, iw in enumerate(leaf_mmrindices):
+        row0 = []
+        row1 = []
+        row2 = []
+        row3 = []
+
+        tw = leaf_count(iw+1)
+
+        for ix in leaf_mmrindices[m:]:
+            row0.append(seqs((iw, ix)))
+            row1.append(seqs(roots(iw, ix)))
+            row2.append(s(len(roots(iw, ix))))
+
+            d = len(inclusion_proof_path(ix+1, iw))
+
+            u = leaf_witness_update_due(tw, d)
+            rr = roots(iw, ix)
+            if rr:
+                ta = leaf_count(rr[-1])
+                tb = tw + u - 1
+                if ta != tb:
+                    print(f"{str(ta).rjust(2, ' ')} {str(tb).rjust(2, ' ')} {str(tb - ta).rjust(2, ' ')}")
+
+
+        for r in [row0, row1, row2, row3]:
+            rows.append(", ".join(r))
+        rows.append("")
+
+
+    # print("\n".join(rows))
+
+    if False:
+        print(j([s(sz-1) for sz in complete_mmrs]))
+        print(j([s(basesz(sz)) for sz in complete_mmrs]))
+        print(j([s(sz - basesz(sz)) for sz in complete_mmrs]))
+        print(j([s(p-((1<<basesz(p))-1)) for p in  complete_mmrs]))
+        print(j(["  "] + [s(complete_mmrs[i]+d) for (i, d) in enumerate([p-((1<<basesz(p))-1) for p in  complete_mmrs][1:])]))
+        print(j([s(p-1) for p in leaf_positions]))
+        print(j([s(depth_inext(p)) for p in leaf_positions]))
+    sys.exit(0)
+
+
     if len(sys.argv) > 1:
         try:
             globals()["print_%s" % sys.argv[1]]()

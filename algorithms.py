@@ -30,7 +30,7 @@ def addleafhash(db, v: bytes) -> int:
     return i
 
 
-def inclusion_proof_path(s, i) -> List[int]:
+def inclusion_proof_path2(s, i) -> List[int]:
     """Returns the list of node indices proving inclusion of i"""
 
     # 1. Set the path to the empty list
@@ -47,17 +47,20 @@ def inclusion_proof_path(s, i) -> List[int]:
         # 1. if `IndexHeight(i+1)` is greater than `g`
         if index_height(i + 1) > g:
             # 1. Set `iSibling` to `iLocalPeak - SiblingOffset(g)`
-            isibling = ilocalpeak - ((2 << g) - 1)
+            # isibling = ilocalpeak - ((2 << g) - 1)
+            isibling = i - ((2 << g) - 1)
             # 1. Set `i` to `i+1`
             i = i + 1
         else:
             # 1. Set `iSibling` to `iLocalPeak + SiblingOffset(g)`
-            isibling = ilocalpeak + ((2 << g) - 1)
+            # isibling = ilocalpeak + ((2 << g) - 1)
+            isibling = i + ((2 << g) - 1)
             # 1. Set `i` to `i` + `2 << g`
             i = i + (2 << g)
 
         # If `iSibling` is greater or equal to `S` (#termination_condition)
-        if isibling >= s:
+        # if isibling >= s:
+        if isibling > (s-1):
             # Return the current path to the caller, terminating the algorithm.
             return path
         # 1. Append the current pathElement to the proof.
@@ -66,15 +69,68 @@ def inclusion_proof_path(s, i) -> List[int]:
         g = g + 1
 
 
+def inclusion_proof_path(i, ix):
+    """Returns the list of node indices proving inclusion of i
+
+    In the complete MMR whose size is ix+1
+
+    Note that if you have a path for some element < i in i, this function will
+    return the update of that path with respect to MMR(ix+1)
+
+    """
+
+    # Set the path to the empty list
+    path = []
+
+    # Set `g` to `index_height(i)`
+    g = index_height(i)
+
+    # Repeat until #termination_condition evaluates true
+    while True:
+
+        # Set `siblingoffset` to 2^(g+1)
+        siblingoffset = (2 << g)
+
+        # If `index_height(i+1)` is greater than `g`
+        if index_height(i+1) > g:
+
+            # Set isibling to `i - siblingoffset + 1`. Because i is the right
+            # sibling, its witness is the left which is offset behind.
+            isibling = i - siblingoffset + 1
+
+            # Set `i` to `i+1`. The parent of a right sibling is always
+            # stored immediately after.
+            i += 1
+        else:
+
+            # Set isibling to `i + siblingoffset - 1`. Because i is the left
+            # sibling, its witness is the right and is offset ahead.
+            isibling = i + siblingoffset - 1
+
+            # Set `i` to `i+siblingoffset`. The parent of a left sibling is
+            # stored at 1 position ahead of the right sibling.
+            i += siblingoffset
+
+        # If `isibling` is greater than `ix`, return the collected path. This is
+        # the #termination_condition
+        if isibling > ix:
+            return path
+
+        # Append isibling to the proof.
+        path.append(isibling)
+        # Increment the height index `g`.
+        g += 1
+
+
 def verify_inclusion_path(
     i: int, nodehash: bytes, proof: List[bytes], root: bytes
 ) -> Tuple[bool, int]:
     """
     Args:
-        s (int): The size of the MMR providing the accumulator `root`
-        i (int): The mmr index where `nodehash` is located
-        proof (List[bytes]): The siblings required to produce `root` from `nodehash`
-        root (bytes): The peak from the accumulator for MMR(s) which includes node `i`
+        i (int): The mmr index where `nodehash` is located.
+        nodehash (bytes): The value whose inclusion is being proven.
+        proof (List[bytes]): The siblings required to produce `root` from `nodehash`.
+        root (bytes): The peak from the accumulator which includes node `i`.
 
     Returns:
         A tuple  (bool, int), where the bool is True if `root` was produced and
@@ -99,7 +155,7 @@ def verify_inclusion_path(
             # 1. Set `elementHash` = `H(i+1 || pathItem || elementHash)`
             elementhash = hash_pospair64(i + 1, pathitem, elementhash)
         else:
-            # 1. Set `i` to `i + (2 << g)`
+            # 1. Set `i` to `i + (2^(g+1))`
             i = i + (2 << g)
             # 1. Set `elementHash` to `H(i+1 || elementHash || pathItem)`
             elementhash = hash_pospair64(i + 1, elementhash, pathitem)
@@ -117,32 +173,32 @@ def verify_inclusion_path(
     return (False, len(proof))
 
 
-def consistency_proof(asize: int, bsize: int) -> List[int]:
-    """Returns a proof of consistency between the MMR's identified by asize and bsize.
+def consistency_proof(ia: int, ib: int) -> List[int]:
+    """Returns a proof of consistency between the MMR's identified by ia and ib.
 
     The returned path is the concatenation of the inclusion proofs
     authenticating the peaks of MMR(a) in MMR(b)
     """
-    apeaks = peaks(asize)
+    apeaks = peaks(ia+1)
 
     proof = []
 
     for apos in apeaks:
-        proof.extend(inclusion_proof_path(bsize, apos - 1))
+        proof.extend(inclusion_proof_path(apos - 1, ib))
 
     return proof
 
 
 def verify_consistency(
-    asize: int,
-    bsize: int,
+    ia: int,
+    ib: int,
     aaccumulator: List[bytes],
     baccumulator: List[bytes],
     path: List[bytes],
 ) -> bool:
     """ """
-    apeakpositions = peaks(asize)
-    bpeakpositions = peaks(bsize)
+    apeakpositions = peaks(ia+1)
+    bpeakpositions = peaks(ib+1)
 
     if len(aaccumulator) != len(apeakpositions):
         return False
@@ -313,38 +369,6 @@ def parent(i: int) -> int:
     return i + (2 << g)
 
 
-def root_change(d: int) -> int:
-    """Return the number of nodes that can be added to the mmr without impacting a proof which has length `d`
-
-    This method may be used when reading the accumulator root directly from
-    the verifiable data.
-
-    Args:
-        d: The length of the inclusion proof
-
-    Returns:
-        The number of nodes that can be added to the mmr without burying the
-        accumulator root reached by `d`, which may be 0
-    """
-    return (2 << d) - 2
-
-
-def next_leaf_proof(tx: int, d: int) -> int:
-    """Returns the count of elements that, when added to MMR(sw), will extend the proof for tx
-    Args:
-        tx:
-        d: length of the proof obtained for tx against accumulator MMR(sw)
-
-    Returns:
-        The count of elements that must be added to the mmr of size sw to
-        extend the inclusion proof for tx
-    """
-
-    ec = 1 << d
-    te = tx % ec
-    return ec - te
-
-
 def next_proof(ix: int, d: int) -> int:
     """Returns the count of elements that, when added to MMR(sw), will extend the proof for ix
     Args:
@@ -360,6 +384,58 @@ def next_proof(ix: int, d: int) -> int:
     return ec - te
 
 
+def leaf_witness_update_due(tx: int, d: int) -> int:
+    """Returns the count of elements that, when added to MMR(sw), will extend the proof for tx
+    Args:
+        tx:
+        d: length of the proof obtained for tx against accumulator MMR(sw)
+
+    Returns:
+        The count of elements that must be added to the mmr of size sw to
+        extend the inclusion proof for tx
+    """
+
+    ec = 1 << d
+    te = tx % ec
+    return ec - te
+
+
+def roots(iw, ix):
+    """Returns the unique accumulator roots that commit the inclusion of iw
+
+    in all mmr states before ix
+    """
+
+    roots = []
+
+    i = iw
+    g = index_height(i)
+
+    while True:
+
+        if index_height(i+1) > g:
+            i += 1
+        else:
+
+            i += (2 << g)
+
+            while index_height(i+1) > g:
+                i += 1
+                g += 1
+
+            if i >= ix:
+                return roots
+            roots.append(i)
+        if i >= ix:
+            return roots
+       
+        g += 1
+
+
+def root_counts(iw, ix):
+    return ((ix).bit_length() - 1) - ((iw).bit_length() - 1)
+
+
 def complete_mmr_size(i) -> int:
     """Returns the smallest complete mmr size which contains node index i"""
 
@@ -372,6 +448,21 @@ def complete_mmr_size(i) -> int:
 
     return i + 1
 
+
+def complete_mmr(i) -> int:
+    """Returns the first complete mmr index which contains i
+
+    A complete mmr index is defined as the first left sibling node above or equal to i.
+    """
+
+    h0 = index_height(i)
+    h1 = index_height(i + 1)
+    while h0 < h1:
+        i += 1
+        h0 = h1
+        h1 = index_height(i + 1)
+
+    return i
 
 # various bit primitives that typically have efficient implementations for 64 bit integers
 
