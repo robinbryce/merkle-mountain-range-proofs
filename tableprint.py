@@ -1,9 +1,9 @@
 from algorithms import inclusion_proof_path
-from algorithms import inclusion_proof_path2
 from algorithms import index_height
 from algorithms import peaks
 from algorithms import leaf_count
 from algorithms import complete_mmr_size
+from algorithms import complete_mmr
 from algorithms import mmr_index
 from algorithms import parent
 from algorithms import roots
@@ -91,11 +91,10 @@ def peaks_table(db=None):
     rows = []
     for i in range(len(complete_mmrs)):
         s = complete_mmrs[i]
-        peak_values = [i+1 for i in peaks(s-1)]  # returns a list of positions, not indices
+        peak_values = [i for i in peaks(s-1)]  # returns a list of positions, not indices
         if db:
-            rows.append([db.get(p - 1).hex() for p in peak_values])
+            rows.append([db.get(p).hex() for p in peak_values])
             continue
-        peak_values = [p for p in peak_values]
         rows.append(peak_values)
 
     return rows
@@ -104,20 +103,14 @@ def peaks_table(db=None):
 def print_39_accumulators(db=None):
     rows = peaks_table(db)
 
-    id_head = " S "
-    if db:
-        id_head = " S-1  "
+    id_head = " S-1  "
     print("|" + id_head + "|" + " " * 8 + "accumulator peaks" + " " + "|")
     print("|" + "-" * 4 + "|" + "-" * 32 + "|")
-
-    offset = 0
-    if db:
-        offset = 1
 
     for i, peak_values in enumerate(rows):
         print(
             "|"
-            + "{:4}".format(complete_mmrs[i] - offset)
+            + "{:4}".format(complete_mmrs[i] - 1)
             + "| "
             + ", ".join([str(p) for p in peak_values])
             + "| "
@@ -469,7 +462,7 @@ def print_node_witness_longevity(mmrsize=39):
                 # check that the previous witnes is updated by the inclusion proof for its previous accumulator root
 
                 ioldroot_by_parent = len(wits[-1]) and parent(wits[-1][-1]) or ix
-                ioldroot = accumulator_root(complete_mmr_size(mmr_index(tw - 1)), ix)
+                ioldroot = accumulator_root(ix, complete_mmr(mmr_index(tw - 1)))
                 assert (
                     ioldroot_by_parent == ioldroot
                 ), f"{ioldroot_by_parent} != {ioldroot}"

@@ -30,45 +30,6 @@ def addleafhash(db, v: bytes) -> int:
     return i
 
 
-def inclusion_proof_path2(s, i) -> List[int]:
-    """Returns the list of node indices proving inclusion of i"""
-
-    # 1. Set the path to the empty list
-    path = []
-    # 1. Set `g` to `IndexHeight(i)`
-    g = index_height(i)
-
-    # 1. Repeat until #termination_condition evaluates true
-    while True:
-        isibling = None  # lexical scopes
-
-        # 1. Set iLocalPeak to `i`
-        ilocalpeak = i
-        # 1. if `IndexHeight(i+1)` is greater than `g`
-        if index_height(i + 1) > g:
-            # 1. Set `iSibling` to `iLocalPeak - SiblingOffset(g)`
-            # isibling = ilocalpeak - ((2 << g) - 1)
-            isibling = i - ((2 << g) - 1)
-            # 1. Set `i` to `i+1`
-            i = i + 1
-        else:
-            # 1. Set `iSibling` to `iLocalPeak + SiblingOffset(g)`
-            # isibling = ilocalpeak + ((2 << g) - 1)
-            isibling = i + ((2 << g) - 1)
-            # 1. Set `i` to `i` + `2 << g`
-            i = i + (2 << g)
-
-        # If `iSibling` is greater or equal to `S` (#termination_condition)
-        # if isibling >= s:
-        if isibling > (s-1):
-            # Return the current path to the caller, terminating the algorithm.
-            return path
-        # 1. Append the current pathElement to the proof.
-        path.append(isibling)
-        # 1. Increment the index height `g`
-        g = g + 1
-
-
 def inclusion_proof_path(i, ix):
     """Returns the list of node indices proving inclusion of i
 
@@ -173,18 +134,18 @@ def verify_inclusion_path(
     return (False, len(proof))
 
 
-def consistency_proof(ia: int, ib: int) -> List[int]:
-    """Returns a proof of consistency between the MMR's identified by ia and ib.
+def consistency_proof(ifrom : int, ito: int) -> List[int]:
+    """Returns a proof of consistency between the MMR's identified by ifrom and ito.
 
     The returned path is the concatenation of the inclusion proofs
-    authenticating the peaks of MMR(a) in MMR(b)
+    authenticating the peaks of MMR(ifrom) in MMR(ito)
     """
-    apeaks = peaks(ia)
+    apeaks = peaks(ifrom)
 
     proof = []
 
     for ipeak in apeaks:
-        proof.extend(inclusion_proof_path(ipeak, ib))
+        proof.extend(inclusion_proof_path(ipeak, ito))
 
     return proof
 
@@ -284,7 +245,6 @@ def leaf_count(s: int) -> int:
     if s == 0:
         return 0
 
-    # peakSize := (uint64(1) << bits.Len64(mmrSize)) - 1
     peaksize = (1 << s.bit_length()) - 1
     peakmap = 0
     while peaksize > 0:
@@ -297,16 +257,15 @@ def leaf_count(s: int) -> int:
     return peakmap
 
 
-def accumulator_root(s: int, i: int) -> int:
-    """Returns the mmr index of the peak root containing `i` in MMR(s)
+def accumulator_root(i: int, ix: int) -> int:
+    """Returns the mmr index of the peak root containing `i` in MMR(ix)
 
     Args:
-        s: Identifies the accumulator state in which to find the local root of `i`
+        ix: Identifies the accumulator state in which to find the root of `i`
         i: The mmr index for which we want to find the root mmr index
 
     """
-    if s == 0:
-        return 0
+    s = ix + 1
 
     peaksize = (1 << s.bit_length()) - 1
     r = 0

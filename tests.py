@@ -185,17 +185,17 @@ class TestAddLeafHash(unittest.TestCase):
         db = FlatDB()
         db.init_size(39)
 
-        peak_positions_table = peaks_table()
+        peak_indices_table = peaks_table()
         peak_values_table = peaks_table(db)
 
         for i in range(len(complete_mmrs)):
-            peak_positions = peak_positions_table[i]
+            peak_indices = peak_indices_table[i]
             peak_values = peak_values_table[i]
-            expect_mmrsize, expect_values = (expect[i][0] + 1, expect[i][1:])
-            for j, p in enumerate(peak_positions):
-                self.assertEqual(complete_mmrs[i], expect_mmrsize)
-                self.assertEqual(db.store[p - 1].hex(), peak_values[j])
-                self.assertEqual(db.store[p - 1].hex(), expect_values[j])
+            expect_complete_mmr, expect_values = (expect[i][0], expect[i][1:])
+            for j, p in enumerate(peak_indices):
+                self.assertEqual(complete_mmrs[i]-1, expect_complete_mmr)
+                self.assertEqual(db.store[p].hex(), peak_values[j])
+                self.assertEqual(db.store[p].hex(), expect_values[j])
 
 
 class TestVerifyInclusion(unittest.TestCase):
@@ -311,7 +311,7 @@ class TestWitnessUpdate(unittest.TestCase):
 
                     ioldroot_by_parent = len(wits[-1]) and parent(wits[-1][-1]) or iw
                     ioldroot = accumulator_root(
-                        complete_mmr_size(mmr_index(tx - 1)), iw
+                        iw, complete_mmr(mmr_index(tx - 1))
                     )
 
                     self.assertEqual(ioldroot_by_parent, ioldroot)
