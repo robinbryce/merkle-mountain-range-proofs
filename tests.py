@@ -208,13 +208,13 @@ class TestVerifyInclusion(unittest.TestCase):
 
         # Show that inclusion_proof_path verifies for all complete mmr's which include i
         for i in range(39):
-            s = complete_mmr_size(i)
-            while s < 39:
+            ix = complete_mmr(i)
+            while ix < 39:
                 # typically, the size, accumulator and paths will be givens.
-                accumulator = [db.get(ip) for ip in peaks(s-1)]
-                path = [db.get(isibling) for isibling in inclusion_proof_path(i, s-1)]
+                accumulator = [db.get(ip) for ip in peaks(ix)]
+                path = [db.get(isibling) for isibling in inclusion_proof_path(i, ix)]
 
-                e = leaf_count(s)
+                e = leaf_count(ix)
 
                 # for leaf nodes, the peak height is len(proof) - 1,
                 # for interiors, we need to take into account the height of the node.
@@ -230,7 +230,7 @@ class TestVerifyInclusion(unittest.TestCase):
                 self.assertTrue(ok)
                 self.assertEqual(pathconsumed, len(path))
 
-                s = complete_mmr_size(s + 1)
+                ix = complete_mmr(ix + 1)
 
 
     def test_verify_inclusion_all_mmrs(self):
@@ -281,7 +281,7 @@ class TestWitnessUpdate(unittest.TestCase):
 
         mmrsize = 39
 
-        t_max = leaf_count(mmrsize)
+        t_max = leaf_count(mmrsize-1)
 
         for iw in range(mmrsize):
             tw = leaf_count(iw)

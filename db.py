@@ -79,7 +79,7 @@ import hashlib
 
 from algorithms import addleafhash
 from algorithms import leaf_count
-from algorithms import complete_mmr_size
+from algorithms import complete_mmr
 from algorithms import hash_pospair64
 from algorithms import trailing_zeros
 
@@ -112,7 +112,7 @@ class FlatDB:
     def init_canonical39(self):
         """Re-creates the kat db using addleafhash"""
 
-        for ileaf in range(leaf_count(39)):
+        for ileaf in range(leaf_count(38)):
             # we know its a leaf, and we know len(self.store) is a valid mmr size,
             # so there is a short cut here for leaf index -> mmr index.
             # the count of trailing zeros in the leaf index is also the number of nodes we will need to add
@@ -126,9 +126,9 @@ class FlatDB:
     def init_size(self, mmrsize: int):
         """Re-creates the kat db using addleafhash"""
 
-        mmrsize = complete_mmr_size(mmrsize - 1)
+        mmr = complete_mmr(mmrsize - 1)
 
-        for ileaf in range(leaf_count(mmrsize)):
+        for ileaf in range(leaf_count(mmr)):
             # we know its a leaf, and we know len(self.store) is a valid mmr size,
             # so there is a short cut here for leaf index -> mmr index.
             # the count of trailing zeros in the leaf index is also the number of nodes we will need to add

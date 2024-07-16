@@ -130,7 +130,7 @@ def index_values_table(mmrsize=39):
     leafcounts = []
     for i in range(mmrsize):
         heights.append(index_height(i))
-        leafcounts.append(leaf_count(i + 1))
+        leafcounts.append(leaf_count(i))
 
     return [heights, leafcounts]
 
@@ -229,20 +229,20 @@ def inclusion_paths_table(mmrsize=39):
 
     rows = []
     for i in range(mmrsize):
-        s = complete_mmr_size(i)
-        while s < mmrsize:
-            accumulator = [ip for ip in peaks(s-1)]
-            path = inclusion_proof_path(i, s-1)
-            e = leaf_count(s)
+        ix = complete_mmr(i)
+        while ix < mmrsize:
+            accumulator = [ip for ip in peaks(ix)]
+            path = inclusion_proof_path(i, ix)
+            e = leaf_count(ix)
 
             # for leaf nodes, the peak height is len(proof) - 1, for interiors, we need to take into account the height of the node.
             g = len(path) + index_height(i)
 
             ai = accumulator_index(e, g)
 
-            rows.append([i, e, s, path, ai, accumulator])
+            rows.append([i, e, ix, path, ai, accumulator])
 
-            s = complete_mmr_size(s + 1)
+            ix = complete_mmr(ix + 1)
 
     return rows
 
@@ -346,7 +346,7 @@ def getreleventindices(lastupdateidx, previdx, d):
 def node_witness_update_tables(mmrsize=39):
 
     rows = []
-    tmax = leaf_count(mmrsize)
+    tmax = leaf_count(mmrsize-1)
 
     for tw in range(tmax):
         iw = mmr_index(tw)
@@ -425,7 +425,7 @@ def print_node_witness_longevity(mmrsize=39):
     # which was once a peak and  has since been "burried", making it an
     # interiour.
 
-    t_max = leaf_count(mmrsize)
+    t_max = leaf_count(mmrsize-1)
     print("| ta  |{tw:s}".format(tw="|".join(["--" for i in range(t_max)])))
     print(
         "|tx:ix|{tw:s}".format(
@@ -530,7 +530,7 @@ if __name__ == "__main__":
         row2 = []
         row3 = []
 
-        tw = leaf_count(iw+1)
+        tw = leaf_count(iw)
 
         for ix in leaf_mmrindices[m:]:
             row0.append(seqs((iw, ix)))

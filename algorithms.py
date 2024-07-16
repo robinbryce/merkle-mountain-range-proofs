@@ -229,8 +229,8 @@ def peaks(i: int) -> List[int]:
     return peaks
 
 
-def leaf_count(s: int) -> int:
-    """Returns the count of leaf elements in MMR(s)
+def leaf_count(i: int) -> int:
+    """Returns the count of leaf elements in MMR(i)
 
     The bits of the count also form a mask, where a single bit is set for each
     "peak" present in the accumulator. The bit position is the height of the
@@ -242,8 +242,7 @@ def leaf_count(s: int) -> int:
     height and bitpos is any bit set in the leaf count.
 
     """
-    if s == 0:
-        return 0
+    s = i + 1
 
     peaksize = (1 << s.bit_length()) - 1
     peakmap = 0
