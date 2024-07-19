@@ -1,8 +1,8 @@
 from algorithms import inclusion_proof_path
 from algorithms import index_height
 from algorithms import peaks
+from algorithms import peak_depths
 from algorithms import leaf_count
-from algorithms import complete_mmr_size
 from algorithms import complete_mmr
 from algorithms import mmr_index
 from algorithms import parent
@@ -14,7 +14,8 @@ from algorithms import accumulator_index
 
 from db import KatDB, FlatDB
 
-complete_mmrs = [ 1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38, 39 ]
+complete_mmr_sizes =   [ 1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38, 39 ]
+complete_mmr_indices = [ 0, 2, 3, 6, 7,  9, 10, 14, 15, 17, 18, 21, 22, 24, 25, 30, 31, 33, 34, 37, 38 ]
 
 def kat39_leaf_table():
     """Returns a row for each leaf entry [mmrIndex, leafIndex, leafHash]"""
@@ -89,8 +90,8 @@ def print_kat39():
 
 def peaks_table(db=None):
     rows = []
-    for i in range(len(complete_mmrs)):
-        s = complete_mmrs[i]
+    for i in range(len(complete_mmr_sizes)):
+        s = complete_mmr_sizes[i]
         peak_values = [i for i in peaks(s-1)]  # returns a list of positions, not indices
         if db:
             rows.append([db.get(p).hex() for p in peak_values])
@@ -103,14 +104,14 @@ def peaks_table(db=None):
 def print_39_accumulators(db=None):
     rows = peaks_table(db)
 
-    id_head = " S-1  "
+    id_head = " i"
     print("|" + id_head + "|" + " " * 8 + "accumulator peaks" + " " + "|")
-    print("|" + "-" * 4 + "|" + "-" * 32 + "|")
+    print("|" + "-" * 2 + "|" + "-" * 26 + "|")
 
     for i, peak_values in enumerate(rows):
         print(
             "|"
-            + "{:4}".format(complete_mmrs[i] - 1)
+            + "{:2}".format(complete_mmr_sizes[i] - 1)
             + "| "
             + ", ".join([str(p) for p in peak_values])
             + "| "
@@ -158,12 +159,12 @@ def minmax_inclusion_path_table(mmrsize=39):
     rows = []
     max_accumulator = [ip+1 for ip in peaks(mmrsize-1)]
     for i in range(mmrsize):
-        s = complete_mmr_size(i)
-        accumulator = [ip for ip in peaks(s-1)]
-        path = inclusion_proof_path(i, s - 1)
+        ix = complete_mmr(i)
+        accumulator = [ip for ip in peaks(ix)]
+        path = inclusion_proof_path(i, ix)
         path_maxsz = inclusion_proof_path(i, mmrsize-1)
 
-        rows.append([i, s, path, accumulator, path_maxsz, max_accumulator])
+        rows.append([i, ix, path, accumulator, path_maxsz, max_accumulator])
 
     return rows
 
@@ -205,8 +206,8 @@ def print_minmax_inclusion_paths(mmrsize=39):
         spath_max = "[" + ", ".join([str(p) for p in path_max]) + "]"
 
         # it is very confusingif we list the accumulator as positions yet have the paths be indices. so lets not do that.
-        saccumulator = "[" + ", ".join([str(p - 1) for p in accumulator]) + "]"
-        smax_accumulator = "[" + ", ".join([str(p - 1) for p in acc_max]) + "]"
+        saccumulator = "[" + ", ".join([str(p) for p in accumulator]) + "]"
+        smax_accumulator = "[" + ", ".join([str(p) for p in acc_max]) + "]"
 
         print(
             "|"
@@ -295,7 +296,7 @@ def print_inclusion_paths(mmrsize=39):
         spath = "[" + ", ".join([str(p) for p in path]) + "]"
 
         # it is very confusingif we list the accumulator as positions yet have the paths be indices. so lets not do that.
-        saccumulator = "[" + ", ".join([str(p - 1) for p in accumulator]) + "]"
+        saccumulator = "[" + ", ".join([str(p) for p in accumulator]) + "]"
 
         sroot = db.get(accumulator[ai]).hex()
 
@@ -350,13 +351,12 @@ def node_witness_update_tables(mmrsize=39):
 
     for tw in range(tmax):
         iw = mmr_index(tw)
-        sw = complete_mmr_size(iw)
-        dw = len(inclusion_proof_path(iw, sw-1))
+        mmrw = complete_mmr(iw)
+        dw = len(inclusion_proof_path(iw, mmrw))
         for tx in range(tw+1, tmax):
             leaf_indices = getreleventindices(tw, tx, dw)
             rows.append([iw, tw, tx, "reysop", leaf_indices])
             ix = mmr_index(tx)
-            sx = complete_mmr_size(ix)
             leaf_indices_mmriver = leaf_index_updates(tw, tx, dw)
             rows.append([iw, tw, tx, "mmrive", leaf_indices_mmriver])
 
@@ -444,16 +444,16 @@ def print_node_witness_longevity(mmrsize=39):
 
         for tw in range(tx, t_max):
             iw = mmr_index(tw)
-            sw = complete_mmr_size(iw)
+            mmrw = complete_mmr(iw)
             # dsw = index_height(sw - 1)
             # depth of the proof for ix against the accumulator sw
-            dsw = len(inclusion_proof_path(ix, sw-1))
+            dsw = len(inclusion_proof_path(ix, mmrw))
             # row0.append(tx)
             row0.append(index_witness_update_due(ix, dsw))
             # additions until burried, and also until its witness next needs updating
             row1.append(dsw)
 
-            w = inclusion_proof_path(ix, sw-1)
+            w = inclusion_proof_path(ix, mmrw)
             if wits:
                 assert len(w) >= len(wits[-1])
                 for i in range(len(wits[-1])):
@@ -467,7 +467,7 @@ def print_node_witness_longevity(mmrsize=39):
                     ioldroot_by_parent == ioldroot
                 ), f"{ioldroot_by_parent} != {ioldroot}"
 
-                wupdated = wits[-1] + inclusion_proof_path(ioldroot, sw-1)
+                wupdated = wits[-1] + inclusion_proof_path(ioldroot, mmrw)
                 for i in range(len(wupdated)):
                     assert wupdated[i] == w[i]
 
@@ -513,57 +513,41 @@ import sys
 
 if __name__ == "__main__":
 
-    def s(i): return str(i).rjust(2, " ")
-    def j(l): return ", ".join(l)
+    if False:
+        def s(i): return str(i).rjust(2, " ")
+        def j(l): return ", ".join(l)
 
-    leaf_mmrindices = [0,   1, 3,   4,  7,   8, 10,  11, 15,  16, 18,  19, 22,  23,   25,   26,  31,  32,   34,  35,   38]
-    leaf_positions = [i+1 for i in leaf_mmrindices]
+        leaf_mmrindices = [0,   1, 3,   4,  7,   8, 10,  11, 15,  16, 18,  19, 22,  23,   25,   26,  31,  32,   34,  35,   38]
+        leaf_positions = [i+1 for i in leaf_mmrindices]
 
-    rows = []
+        rows = []
 
-    def s(v): return str(v).rjust(2, " ")
-    def seqs(seq): return "[" + ", ".join([str(e).rjust(2, " ") for e in seq]) + "]"
+        def s(v): return str(v).rjust(2, " ")
+        def seqs(seq): return "[" + ", ".join([str(e).rjust(2, " ") for e in seq]) + "]"
 
-    for m, iw in enumerate(leaf_mmrindices):
-        row0 = []
-        row1 = []
-        row2 = []
-        row3 = []
+        ito = complete_mmr(0)
+        while ito <= 38:
 
-        tw = leaf_count(iw)
+            print(seqs(peaks(ito)))
+            print(seqs(peak_depths(ito)))
+            print(seqs(list(reversed(sorted(list(set([len(inclusion_proof_path(ifrom, ito))+index_height(ifrom) for ifrom in range(ito)])))))))
 
-        for ix in leaf_mmrindices[m:]:
-            row0.append(seqs((iw, ix)))
-            row1.append(seqs(roots(iw, ix)))
-            row2.append(s(len(roots(iw, ix))))
+            print("{s}".format(s=bin(leaf_count(ito))))
+            print()
+            ito = complete_mmr(ito + 1)
 
-            d = len(inclusion_proof_path(ix+1, iw))
-
-            u = leaf_witness_update_due(tw, d)
-            rr = roots(iw, ix)
-            if rr:
-                ta = leaf_count(rr[-1])
-                tb = tw + u - 1
-                if ta != tb:
-                    print(f"{str(ta).rjust(2, ' ')} {str(tb).rjust(2, ' ')} {str(tb - ta).rjust(2, ' ')}")
-
-
-        for r in [row0, row1, row2, row3]:
-            rows.append(", ".join(r))
-        rows.append("")
-
+        sys.exit(0)
 
     # print("\n".join(rows))
 
     if False:
-        print(j([s(sz-1) for sz in complete_mmrs]))
-        print(j([s(basesz(sz)) for sz in complete_mmrs]))
-        print(j([s(sz - basesz(sz)) for sz in complete_mmrs]))
-        print(j([s(p-((1<<basesz(p))-1)) for p in  complete_mmrs]))
-        print(j(["  "] + [s(complete_mmrs[i]+d) for (i, d) in enumerate([p-((1<<basesz(p))-1) for p in  complete_mmrs][1:])]))
+        print(j([s(sz-1) for sz in complete_mmr_sizes]))
+        print(j([s(basesz(sz)) for sz in complete_mmr_sizes]))
+        print(j([s(sz - basesz(sz)) for sz in complete_mmr_sizes]))
+        print(j([s(p-((1<<basesz(p))-1)) for p in  complete_mmr_sizes]))
+        print(j(["  "] + [s(complete_mmr_sizes[i]+d) for (i, d) in enumerate([p-((1<<basesz(p))-1) for p in  complete_mmr_sizes][1:])]))
         print(j([s(p-1) for p in leaf_positions]))
         print(j([s(depth_inext(p)) for p in leaf_positions]))
-    sys.exit(0)
 
 
     if len(sys.argv) > 1:

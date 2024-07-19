@@ -77,7 +77,7 @@ ASCII art & notes for the test db and related properties.
 """
 import hashlib
 
-from algorithms import addleafhash
+from algorithms import add_leaf_hash
 from algorithms import leaf_count
 from algorithms import complete_mmr
 from algorithms import hash_pospair64
@@ -121,7 +121,7 @@ class FlatDB:
             if ileaf % 2:
                 i = i + trailing_zeros(ileaf)
 
-            addleafhash(self, hash_num64(i))
+            add_leaf_hash(self, hash_num64(i))
 
     def init_size(self, mmrsize: int):
         """Re-creates the kat db using addleafhash"""
@@ -137,7 +137,7 @@ class FlatDB:
             if ileaf % 2:
                 i = i + trailing_zeros(ileaf)
 
-            addleafhash(self, hash_num64(i))
+            add_leaf_hash(self, hash_num64(i))
 
 
 class KatDB:

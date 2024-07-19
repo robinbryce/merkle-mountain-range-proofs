@@ -5,22 +5,25 @@ import unittest
 
 from typing import List
 
-from algorithms import consistency_proof
-from algorithms import verify_consistency
-from algorithms import inclusion_proof_path
-from algorithms import verify_inclusion_path
+from algorithms_consistency_as_flat_array import consistency_proof_flat
+from algorithms_consistency_as_flat_array import verify_consistency_flat
+from algorithms import inclusion_proof_path, included_root
+from algorithms import consistency_proof_paths, consistent_roots
+from algorithms import consistent_roots
+from algorithms import verify_consistent_roots
+from algorithms_consistency_as_flat_array import verify_inclusion_path
 from algorithms import mmr_index
 from algorithms import index_height
 from algorithms import accumulator_index
 from algorithms import peaks
+from algorithms import peak_depths
 from algorithms import leaf_count
 from algorithms import parent
 from algorithms import accumulator_root
-from algorithms import complete_mmr_size
 from algorithms import next_proof
 from algorithms import complete_mmr
 
-from tableprint import complete_mmrs
+from tableprint import complete_mmr_sizes, complete_mmr_indices
 from tableprint import peaks_table
 from tableprint import index_values_table
 from tableprint import inclusion_paths_table
@@ -188,12 +191,12 @@ class TestAddLeafHash(unittest.TestCase):
         peak_indices_table = peaks_table()
         peak_values_table = peaks_table(db)
 
-        for i in range(len(complete_mmrs)):
+        for i in range(len(complete_mmr_sizes)):
             peak_indices = peak_indices_table[i]
             peak_values = peak_values_table[i]
             expect_complete_mmr, expect_values = (expect[i][0], expect[i][1:])
             for j, p in enumerate(peak_indices):
-                self.assertEqual(complete_mmrs[i]-1, expect_complete_mmr)
+                self.assertEqual(complete_mmr_sizes[i]-1, expect_complete_mmr)
                 self.assertEqual(db.store[p].hex(), peak_values[j])
                 self.assertEqual(db.store[p].hex(), expect_values[j])
 
@@ -248,81 +251,171 @@ class TestVerifyInclusion(unittest.TestCase):
             self.assertEqual(pathlen, len(path))
 
 
+    def test_verify_included_root_all_mmrs(self):
+        """Every inclusion proof for every node proves the expected peak root"""
+        db = KatDB()
+        db.init_canonical39()
+
+        table = inclusion_paths_table(39)
+        for (i, e, s, pathindices, ai, accumulator) in table:
+            root = db.get(accumulator[ai])
+            node = db.get(i)
+            path = [db.get(ip) for ip in pathindices]
+            proven = included_root(i, node, path)
+            self.assertEqual(root, proven)
+
+
 class TestVerifyConsistency(unittest.TestCase):
-    def test_verify_consistency(self):
+
+    def test_verify_consistent_roots(self):
         """Consistency proofs of arbitrary MMR ranges verify"""
         # Hand populate the db
         db = KatDB()
         db.init_canonical39()
 
-        for stride in range(int(39 / 2)):
-            stride = stride + 1
-            ia = 0
-            ib = complete_mmr(min(ia + stride, 38))
+        for (i, ito) in enumerate(complete_mmr_indices):
 
-            while ib <= 39 and (ib - ia > 0):
-                iproof = consistency_proof(ia, ib)
-                proof = [db.get(i) for i in iproof]
-                iaacc = [ip for ip in peaks(ia)]
-                aacc = [db.get(i) for i in iaacc]
-                ibacc = [ip for ip in peaks(ib)]
-                bacc = [db.get(i) for i in ibacc]
+            for ifrom in complete_mmr_indices[:i]:
 
-                ok = verify_consistency(ia, ib, aacc, bacc, proof)
+                iproofs = consistency_proof_paths(ifrom, ito) 
+
+                proofs = [[db.get(ii) for ii in path] for path in iproofs]
+
+                accumulatorfrom = [db.get(ii) for ii in peaks(ifrom)]
+                toaccumulator = [db.get(ii) for ii in peaks(ito)]
+
+                ok = verify_consistent_roots(ifrom, accumulatorfrom, toaccumulator, proofs)
                 self.assertTrue(ok)
-                ia = complete_mmr(ia + stride)
-                ib = complete_mmr(ia + 2 * stride)
 
+
+    def test_verify_consistency_flat(self):
+        """Consistency proofs of arbitrary MMR ranges verify"""
+        # Hand populate the db
+        db = KatDB()
+        db.init_canonical39()
+
+        for (i, ito) in enumerate(complete_mmr_indices):
+
+            for ifrom in complete_mmr_indices[:i]:
+
+                proof = [db.get(i) for i in consistency_proof_flat(ifrom, ito)]
+                aacc = [db.get(i) for i in peaks(ifrom)]
+                bacc = [db.get(i) for i in peaks(ito)]
+
+                ok = verify_consistency_flat(ifrom, ito, aacc, bacc, proof)
+                self.assertTrue(ok)
+
+
+    def test_consistent_roots(self):
+        """Consistency proofs of arbitrary MMR ranges verify"""
+        # Hand populate the db
+        db = KatDB()
+        db.init_canonical39()
+
+        for (i, ito) in enumerate(complete_mmr_indices):
+
+            for ifrom in complete_mmr_indices[:i]:
+
+                proofs = [[db.get(i) for i in path] for path in consistency_proof_paths(ifrom, ito)]
+
+                accumulatorfrom = [db.get(i) for i in peaks(ifrom)]
+                topeakindices = peaks(ito)
+                toaccumulator = [db.get(i) for i in topeakindices]
+
+                # If all proven nodes match an accumulator peak for MMR(ito) then
+                # MMR(ifrom) is consistent with MMR(ito). Because both the peaks and
+                # the accumulator peaks are listed in descending order of height
+                # we can do this with a linear scan.
+                proven = consistent_roots(ifrom, accumulatorfrom, proofs)
+                numvalid = 0
+                iacc = 0
+                for root in proven:
+                    if toaccumulator[iacc] == root:
+                        numvalid += 1
+                        continue
+                    iacc += 1
+                    if iacc >= len(toaccumulator):
+                        break
+                    if toaccumulator[iacc] != root:
+                        break
+                    numvalid += 1
+
+                self.assertEqual(numvalid, len(proven))
+
+
+    def test_consistent_root_proof_depths(self):
+        """Consistency proof lengths can be used to select the proven accumulator entry"""
+
+        # Hand populate the db
+        db = KatDB()
+        db.init_canonical39()
+
+        for (i, ito) in enumerate(complete_mmr_indices):
+
+            for ifrom in complete_mmr_indices[:i]:
+
+                proofs = [[db.get(i)for i in path] for path in consistency_proof_paths(ifrom, ito)]
+
+                peakindicesfrom = peaks(ifrom)
+                accumulatorfrom = [db.get(i) for i in peakindicesfrom]
+                toaccumulator = [db.get(i) for i in peaks(ito)]
+
+                accumulatordepths = dict((d, i) for (i, d) in enumerate(peak_depths(ito)))
+
+                # The proofs start at the from accumulator peaks. The height of
+                # the future peak that commits them is the height of the old
+                # peak plus the length of the inclusion proof against the future
+                # accumulator.  And that height indexes the sparse accumulator.
+                # The accumulatordepths map is a lookup from sparse to packed
+                # accumulator indices.
+
+                proven = consistent_roots(ifrom, accumulatorfrom, proofs)
+                for (iproof, root) in enumerate(proven):
+
+                    d = len(proofs[iproof]) + index_height(peakindicesfrom[iproof])
+                    self.assertTrue(d in accumulatordepths)
+                    self.assertEqual(toaccumulator[accumulatordepths[d]], root)
 
 class TestWitnessUpdate(unittest.TestCase):
 
     def test_witness_update(self):
-        """Each witness is a prefix of all future witnesses for the same entry"""
+        """Each witness is a prefix of all future witnesses for the same node"""
+
+        db = KatDB()
+        db.init_canonical39()
 
         mmrsize = 39
 
-        t_max = leaf_count(mmrsize-1)
-
         for iw in range(mmrsize):
-            tw = leaf_count(iw)
 
-            row0 = []
-            row1 = []
-            row2 = []
             wits = []
+            ito = complete_mmr(iw+1)
 
-            for tx in range(tw, t_max):
-                ix = complete_mmr(mmr_index(tx))
-                # dsw = index_height(sw - 1)
-                # depth of the proof for ix against the accumulator sw
-                dsw = len(inclusion_proof_path(iw, ix))
-                # row0.append(tx)
-                row0.append(next_proof(iw, dsw))
-                # additions until burried, and also until its witness next needs updating
-                row1.append(dsw)
+            while ito < mmrsize:
 
-                w = inclusion_proof_path(iw, ix)
-                if wits:
-                    self.assertGreaterEqual(len(w), len(wits[-1]))
-                    # The old witness is a strict subset of the new witness
-                    self.assertEqual(wits[-1], w[: len(wits[-1])])
+                w = inclusion_proof_path(iw, ito)
+                if not wits:
+                    wits.append(w)
+                    continue
 
-                    # check that the previous witness is updated by the inclusion proof for its previous accumulator root
+                self.assertGreaterEqual(len(w), len(wits[-1]))
+                # The old witness is a strict subset of the new witness
+                self.assertEqual(wits[-1], w[: len(wits[-1])])
 
-                    ioldroot_by_parent = len(wits[-1]) and parent(wits[-1][-1]) or iw
-                    ioldroot = accumulator_root(
-                        iw, complete_mmr(mmr_index(tx - 1))
-                    )
+                # check that the previous witness is updated by the inclusion
+                # proof for its previous accumulator root. The previous
+                # accumulator root for any proof is the parent of the last
+                # witness in the path.
 
-                    self.assertEqual(ioldroot_by_parent, ioldroot)
+                ioldroot = len(wits[-1]) and parent(wits[-1][-1]) or iw
 
-                    wupdated = wits[-1] + inclusion_proof_path(ioldroot, ix)
+                wupdated = wits[-1] + inclusion_proof_path(ioldroot, ito)
 
-                    self.assertEqual(wupdated, w)
-
-                row2.append(wits and wits[-1] and wits[-1][-1] or iw)
+                self.assertEqual(wupdated, w)
 
                 wits.append(w)
+
+                ito = complete_mmr(ito+1)
 
 
 if __name__ == "__main__":
