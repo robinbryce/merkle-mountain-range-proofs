@@ -18,6 +18,7 @@ from algorithms import accumulator_index
 from algorithms import peaks
 from algorithms import peak_depths
 from algorithms import leaf_count
+from algorithms import consistent_roots_for_sizes, mmr_size_for_leaf_count
 from algorithms import parent
 from algorithms import accumulator_root
 from algorithms import next_proof
@@ -420,3 +421,86 @@ class TestWitnessUpdate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestConsistentRootsForSizes(unittest.TestCase):
+    """consistent_roots_for_sizes: the proof shape is fixed by the two sizes"""
+
+    def setUp(self):
+        self.db = KatDB()
+        self.db.init_canonical39()
+
+    def _pair(self, ifrom, ito):
+        db = self.db
+        proofs = [[db.get(k) for k in path] for path in consistency_proof_paths(ifrom, ito)]
+        accumulatorfrom = [db.get(k) for k in peaks(ifrom)]
+        toaccumulator = [db.get(k) for k in peaks(ito)]
+        return proofs, accumulatorfrom, toaccumulator
+
+    def test_matches_consistent_roots_for_all_complete_pairs(self):
+        """For every complete (ifrom, ito) the proven roots equal consistent_roots and, with the right peaks, the target accumulator"""
+        for (i, ito) in enumerate(complete_mmr_indices):
+            for ifrom in complete_mmr_indices[:i]:
+                proofs, accumulatorfrom, toaccumulator = self._pair(ifrom, ito)
+                roots, nright = consistent_roots_for_sizes(ifrom + 1, ito + 1, accumulatorfrom, proofs)
+                self.assertEqual(roots, consistent_roots(ifrom, accumulatorfrom, proofs))
+                self.assertEqual(roots, toaccumulator[:len(roots)])
+                self.assertEqual(nright, len(toaccumulator) - len(roots))
+
+    def test_from_empty(self):
+        """From size 0 nothing is proven and every target peak is a right peak"""
+        for ito in complete_mmr_indices:
+            roots, nright = consistent_roots_for_sizes(0, ito + 1, [], [])
+            self.assertEqual(roots, [])
+            self.assertEqual(nright, len(peaks(ito)))
+
+    def test_rejects_non_growing_sizes(self):
+        with self.assertRaises(ValueError):
+            consistent_roots_for_sizes(3, 3, [self.db.get(2)], [[]])
+        with self.assertRaises(ValueError):
+            consistent_roots_for_sizes(3, 1, [self.db.get(2)], [[]])
+
+    def test_rejects_incomplete_target(self):
+        for sizeto in (2, 5, 6, 9):
+            with self.assertRaises(ValueError):
+                consistent_roots_for_sizes(1, sizeto, [self.db.get(0)], [[self.db.get(1)]])
+
+    def test_rejects_empty_path(self):
+        """A path of length 0 where the sizes imply 1 is rejected, so the origin peak cannot be re-anchored unchanged at a larger size"""
+        with self.assertRaises(ValueError):
+            consistent_roots_for_sizes(1, 3, [self.db.get(0)], [[]])
+        with self.assertRaises(ValueError):
+            consistent_roots_for_sizes(1, 7, [self.db.get(0)], [[]])
+
+    def test_rejects_perturbed_path_length(self):
+        """Lengthening any one path by one is rejected for every complete pair"""
+        for (i, ito) in enumerate(complete_mmr_indices):
+            for ifrom in complete_mmr_indices[:i]:
+                proofs, accumulatorfrom, _ = self._pair(ifrom, ito)
+                for which in range(len(proofs)):
+                    perturbed = [list(p) for p in proofs]
+                    perturbed[which] = perturbed[which] + [b"\x00" * 32]
+                    with self.assertRaises(ValueError):
+                        consistent_roots_for_sizes(ifrom + 1, ito + 1, accumulatorfrom, perturbed)
+
+    def test_rejects_inconsistent_sibling(self):
+        """When two origin peaks share a target peak, altering a sibling in the lower path is rejected"""
+        checked = 0
+        for (i, ito) in enumerate(complete_mmr_indices):
+            for ifrom in complete_mmr_indices[:i]:
+                proofs, accumulatorfrom, _ = self._pair(ifrom, ito)
+                if len(proofs) < 2 or len(proofs[-2]) == 0:
+                    continue
+                altered = [list(p) for p in proofs]
+                altered[-1][0] = b"\xff" * 32
+                with self.assertRaises(ValueError):
+                    consistent_roots_for_sizes(ifrom + 1, ito + 1, accumulatorfrom, altered)
+                checked += 1
+        self.assertGreater(checked, 0)
+
+    def test_mmr_size_for_leaf_count(self):
+        """The identity holds exactly for complete sizes"""
+        complete = set(i + 1 for i in complete_mmr_indices)
+        for size in range(1, complete_mmr_indices[-1] + 2):
+            leaves = leaf_count(size - 1)
+            self.assertEqual(mmr_size_for_leaf_count(leaves) == size, size in complete)
