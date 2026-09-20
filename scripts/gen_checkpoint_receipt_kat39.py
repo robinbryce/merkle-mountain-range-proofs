@@ -244,7 +244,7 @@ def header_rows():
     acc("canonical/size-1", "a3012619018b033a0001018c01", "the sealer's ES256 header, size 1", 1)
     acc("canonical/ks256-size-8", "a3013a0001010619018b033a0001018c08", "the sealer's KS256 header (alg -65799)")
     acc("canonical/size-39-1-byte-arg", "a3012619018b033a0001018c1827", "size 39 needs a 1-byte argument (0x18 0x27)", 39)
-    acc("canonical/size-2^64-1", "a3012619018b033a0001018c1bffffffffffffffff", "the largest uint64; accepted by the header parser, rejected later as an incomplete size", 18446744073709551615)
+    acc("canonical/size-2^40-8-byte-arg", "a3012619018b033a0001018c1b0000010000000000", "size 2^40 needs an 8-byte argument; accepted by the header parser (the fold rejects it later as incomplete). Kept below 2^53 so every JSON consumer reads it exactly", 1 << 40)
     # skip: unread label 7 carrying an allowed type
     acc("skip/int", "a4012607182a19018b033a0001018c08", "{7: 42} under an unread label")
     acc("skip/negative-int", "a40126072019018b033a0001018c08", "{7: -1}")
@@ -303,6 +303,7 @@ def header_rows():
     assert rows[0]["hex"] == hx(protected_header(ALG_ES256, 8))
     assert rows[2]["hex"] == hx(protected_header(ALG_KS256, 8))
     assert rows[3]["hex"] == hx(protected_header(ALG_ES256, 39))
+    assert rows[4]["hex"] == hx(protected_header(ALG_ES256, 1 << 40))
     assert rows[16]["hex"] == hx(protected_header(ALG_ES256, 8, [(cbor_int(-1), cbor_int(0)), (cbor_int(24), cbor_int(0))]))
     return rows
 
