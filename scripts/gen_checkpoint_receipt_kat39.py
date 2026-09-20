@@ -216,9 +216,6 @@ def negatives(db):
     a5, p5 = proof_for(db, 7, 8)
     add("base-mismatch/declared-4-trusted-7", "7-to-8", "proof declares tree_size_1 = 4 while the verifier's trusted size is 7; the verifier compares and rejects before folding", 4, 8, a5, p5, [db.get(7)], "base_mismatch")
     rows[-1]["trusted_tree_size_1"] = 7
-    # the two calldata replays from FOR-568, presented as negatives on size alone
-    a6, p6 = proof_for(db, 7, 8)
-    add("size-substitution/7-to-8-presented-as-7-to-10", "7-to-8", "same accumulator, paths and right peak, tree_size_2 declared 10; rejected on the signed size, and by the fold's right-peak count", 7, 10, a6, p6, [db.get(7)], "right_peak_count_mismatch")
     return rows
 
 
@@ -404,6 +401,16 @@ def receipts(db):
                  "signature_hex": hx(sig10), "receipt_cbor_hex": hx(receipt_cbor(ph10, proof_b8, sig10)),
                  "expect": {"result": "reject", "reason": "signed_size_mismatch"},
                  "note": "the signature verifies over {..., -65933: 10} and this payload; the proof's tree_size_2 is 8"})
+    # (a2) the FOR-568 replay: the genuine 7 -> 8 receipt with the proof re-declared as 7 -> 10.
+    # Both targets have one right peak, so the fold cannot tell them apart; only the signed size does.
+    ph8 = protected_header(ALG_ES256, 8)
+    sig8, _, _ = es_sign(sig_structure(ph8, payload))
+    proof_b10 = consistency_proof_bstr(7, 10, paths, right)
+    negs.append({"name": "reject/replay-7-to-8-declared-7-to-10", "alg": ALG_ES256, "tree_size_1": 7,
+                 "protected_header_hex": hx(ph8), "consistency_proof_hex": hx(proof_b10), "detached_payload_hex": hx(payload),
+                 "signature_hex": hx(sig8), "receipt_cbor_hex": hx(receipt_cbor(ph8, proof_b10, sig8)),
+                 "expect": {"result": "reject", "reason": "signed_size_mismatch"},
+                 "note": "the FOR-568 substitution: byte-identical paths, right peak and signature, tree_size_2 declared 10; sizes 8 and 10 both take one right peak so the fold accepts either, and only the signed size rejects it"})
     # (b) header without the label, otherwise valid (pre-ADR-0066 sealer)
     ph_old = cbor_map([(cbor_int(LABEL_ALG), cbor_int(ALG_ES256)), (cbor_int(LABEL_VDS), cbor_int(VDS_MMR_CONSISTENCY))])
     sig_old, _, _ = es_sign(sig_structure(ph_old, payload))
@@ -413,7 +420,6 @@ def receipts(db):
                  "expect": {"result": "reject", "reason": "signed_size_missing"},
                  "note": "a valid pre-ADR-0066 receipt: {1: -7, 395: 3} signed over the same payload"})
     # (c) payload is sha256(concat) rather than the raw concat
-    ph8 = protected_header(ALG_ES256, 8)
     sig_h, _, _ = es_sign(sig_structure(ph8, hashlib.sha256(payload).digest()))
     negs.append({"name": "reject/payload-is-hashed-accumulator", "alg": ALG_ES256, "tree_size_1": 7,
                  "protected_header_hex": hx(ph8), "consistency_proof_hex": hx(proof_b8), "detached_payload_hex": hx(payload),
