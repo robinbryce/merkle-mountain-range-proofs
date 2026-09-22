@@ -11,6 +11,8 @@ algorithms.py / db.py. Sections:
   consistency_negatives  proof shapes every verifier MUST reject
   protected_headers    protected-header byte classes (ADR-0066 D9)
   keys, receipts, receipt_negatives  signed receipts under fixed test keys
+  receipt_chains       receipts relaying several consistency proofs under
+                       one signature (ADR-0066 D2)
 
 Usage: gen_checkpoint_receipt_kat39.py [--go-kat PATH] > out.json
   --go-kat  path to go-merklelog mmr/draft_kat39_test.go; when given, the
@@ -96,7 +98,22 @@ def consistency_proof_bstr(size1, size2, paths, right):
 
 
 def receipt_cbor(protected, proof_bstr, signature):
+    """The single-proof receipt: the consistency-proof key carries one bstr.
+
+    This is the form the `receipts` and `receipt_negatives` rows pin, and the
+    form of every checkpoint sealed before the chain wire form. Chains use
+    receipt_chain_cbor.
+    """
     unprotected = cbor_map([(cbor_int(LABEL_VDP), cbor_map([(cbor_int(KEY_CONSISTENCY_PROOF), proof_bstr)]))])
+    return cbor_tag(18, cbor_array([cbor_bstr(protected), unprotected, CBOR_NULL, cbor_bstr(signature)]))
+
+
+def receipt_chain_cbor(protected, proof_bstrs, signature):
+    """The draft's `consistency-proofs = [ + consistency-proof ]`: the
+    consistency-proof key carries an array of one or more encoded proofs, in
+    fold order."""
+    proofs = cbor_array(list(proof_bstrs))
+    unprotected = cbor_map([(cbor_int(LABEL_VDP), cbor_map([(cbor_int(KEY_CONSISTENCY_PROOF), proofs)]))])
     return cbor_tag(18, cbor_array([cbor_bstr(protected), unprotected, CBOR_NULL, cbor_bstr(signature)]))
 
 
@@ -439,6 +456,85 @@ def receipts(db):
     return {"es256": es_key, "ks256": ks_key}, rows, negs
 
 
+def receipt_chains(db):
+    """Receipts relaying several consistency proofs under one signature.
+
+    A catch-up over several sealed steps is one receipt carrying one proof
+    per step, in fold order. The signature covers the accumulator the last
+    step reaches and the protected header carries that step's tree-size-2;
+    the intermediate sizes carry no signature of their own, so a verifier
+    pins each step by requiring it to start where its predecessor ended, the
+    first at the size the verifier already trusts (ADR-0066 D2, D5.4).
+    """
+    es_key, es_sign, es_verify, n = es256_signer()
+    steps = [1, 3, 4, 7]
+    rows = []
+
+    proof_bstrs, step_rows = [], []
+    for s1, s2 in zip(steps, steps[1:]):
+        acc, paths = proof_for(db, s1, s2)
+        roots, _ = alg.consistent_roots_for_sizes(s1, s2, acc, paths)
+        target = [db.get(i) for i in alg.peaks(s2 - 1)]
+        proof_bstrs.append(consistency_proof_bstr(s1, s2, paths, target[len(roots):]))
+        step_rows.append({"tree_size_1": s1, "tree_size_2": s2})
+
+    final = [db.get(i) for i in alg.peaks(steps[-1] - 1)]
+    payload = b"".join(final)
+    ph = protected_header(ALG_ES256, steps[-1])
+    ss = sig_structure(ph, payload)
+    sig, r, s = es_sign(ss)
+    es_verify(ss, r, s)
+
+    def row(name, header, proofs, signature, expect, note, **extra):
+        return {
+            "name": name, "alg": ALG_ES256, "alg_name": "ES256",
+            "trusted_tree_size_1": steps[0],
+            "protected_header_hex": hx(header),
+            "consistency_proofs_hex": [hx(b) for b in proofs],
+            "detached_payload_hex": hx(payload),
+            "signature_hex": hx(signature),
+            "receipt_cbor_hex": hx(receipt_chain_cbor(header, proofs, signature)),
+            "expect": expect, "note": note, **extra,
+        }
+
+    rows.append(row(
+        "accept/chain-1-3-4-7", ph, proof_bstrs, sig,
+        {"result": "accept", "tree_size_2": steps[-1]},
+        "three sealed steps relayed under one signature; folding them in order from the accumulator of size 1 reaches the accumulator of size 7, which is the detached payload",
+        steps=step_rows,
+        sig_structure_hex=hx(ss), message_digest_hex=hx(hashlib.sha256(ss).digest()),
+        digest_alg="sha256"))
+
+    # The middle step declares an origin one node below where its predecessor
+    # ended: two extensions that do not join, presented as one chain.
+    s1_bad = steps[1] - 1
+    acc, paths = proof_for(db, steps[1], steps[2])
+    roots, _ = alg.consistent_roots_for_sizes(steps[1], steps[2], acc, paths)
+    target = [db.get(i) for i in alg.peaks(steps[2] - 1)]
+    gapped = list(proof_bstrs)
+    gapped[1] = consistency_proof_bstr(s1_bad, steps[2], paths, target[len(roots):])
+    broken_steps = [dict(x) for x in step_rows]
+    broken_steps[1]["tree_size_1"] = s1_bad
+    rows.append(row(
+        "reject/chain-middle-step-off-by-one", ph, gapped, sig,
+        {"result": "reject", "reason": "chain_not_contiguous"},
+        f"the first step ends at size {steps[1]} and the second declares size {s1_bad} as its origin; the paths and the signature are the genuine ones, and only the comparison with the previous step rejects it",
+        steps=broken_steps))
+
+    # The signature of the genuine two-step receipt to size 4, relayed with
+    # the third step appended: the signed size is an intermediate step's.
+    middle = [db.get(i) for i in alg.peaks(steps[2] - 1)]
+    ph_mid = protected_header(ALG_ES256, steps[2])
+    sig_mid, _, _ = es_sign(sig_structure(ph_mid, b"".join(middle)))
+    rows.append(row(
+        "reject/chain-signed-size-is-an-intermediate-step", ph_mid, proof_bstrs, sig_mid,
+        {"result": "reject", "reason": "signed_size_mismatch"},
+        f"a genuine receipt for {steps[0]} -> {steps[2]} with the {steps[2]} -> {steps[-1]} step appended under its signature; the signed tree-size-2 is {steps[2]} where the last step declares {steps[-1]}, so the accumulator the chain reaches is unsigned",
+        steps=step_rows,
+        detached_payload_hex=hx(b"".join(middle))))
+    return rows
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--go-kat")
@@ -448,6 +544,7 @@ def main():
         check_against_go(tree, a.go_kat)
     pairs = [pair_row(db, s1, s2) for s1 in [0] + sizes for s2 in sizes if s2 > s1]
     keys, rcpts, rneg = receipts(db)
+    chains = receipt_chains(db)
     out = {
         "version": 1,
         "description": "Checkpoint receipt of consistency KAT over the canonical 39-node MMR: tree, size-driven fold (consistent_roots_for_sizes), rejected proof shapes, protected-header classes (ADR-0066 D9), and signed receipts under fixed test keys.",
@@ -460,7 +557,8 @@ def main():
             "sig_structure": "['Signature1', bstr(protected), bstr(''), bstr(payload)] as CBOR",
             "es256": "ECDSA P-256 over sha256(sig_structure); signature r||s, 64 bytes, low-s",
             "ks256": "ECDSA secp256k1 over keccak256(sig_structure); signature r||s||v, 65 bytes, v in {27, 28}; verifier recovers the address",
-            "receipt": "CBOR tag 18 [bstr(protected), {396: {-2: bstr(consistency_proof)}}, null, bstr(signature)]",
+            "receipt": "CBOR tag 18 [bstr(protected), {396: {-2: bstr(consistency_proof)}}, null, bstr(signature)]; the single-proof form the receipts and receipt_negatives rows carry, and the form of every checkpoint sealed before the array form",
+            "receipt_chain": "CBOR tag 18 [bstr(protected), {396: {-2: [bstr(consistency_proof), ...]}}, null, bstr(signature)]; the draft's consistency-proofs = [ + consistency-proof ], one proof per sealed step in fold order, carried by the receipt_chains rows. An empty array is not a receipt of consistency and is rejected. A verifier accepts both forms; a producer writes this one",
             "consistency_proof": "bstr(CBOR [tree_size_1, tree_size_2, [[bstr path node]...], [bstr right peak]...])",
         },
         "tree": tree,
@@ -470,10 +568,11 @@ def main():
         "keys": keys,
         "receipts": rcpts,
         "receipt_negatives": rneg,
+        "receipt_chains": chains,
     }
     json.dump(out, sys.stdout, indent=1)
     sys.stdout.write("\n")
-    print(f"pairs={len(pairs)} negatives={len(out['consistency_negatives'])} headers={len(out['protected_headers'])} receipts={len(rcpts)} receipt_negatives={len(rneg)}", file=sys.stderr)
+    print(f"pairs={len(pairs)} negatives={len(out['consistency_negatives'])} headers={len(out['protected_headers'])} receipts={len(rcpts)} receipt_negatives={len(rneg)} receipt_chains={len(chains)}", file=sys.stderr)
 
 
 if __name__ == "__main__":
