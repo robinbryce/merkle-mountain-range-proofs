@@ -187,6 +187,113 @@ def consistent_roots(
     return roots
 
 
+def mmr_size_for_leaf_count(leaves: int) -> int:
+    """Returns the node count of the complete MMR with `leaves` leaves
+
+    Every leaf adds itself plus one interior node per binary carry, and each
+    peak is a carry that has not happened, so the count is
+    2 * leaves - popcount(leaves). Because leaf_count rounds an incomplete
+    size down to the largest complete MMR below it,
+    mmr_size_for_leaf_count(leaf_count(size - 1)) == size holds exactly for
+    complete sizes; this is complete_mmr in closed form.
+    """
+    return 2 * leaves - bin(leaves).count("1")
+
+
+def consistent_roots_for_sizes(
+    sizefrom: int,
+    sizeto: int,
+    accumulatorfrom: List[bytes],
+    proofs: List[List[bytes]],
+) -> Tuple[List[bytes], int]:
+    """Produce the peaks of MMR(sizeto) that the proofs prove from the peaks of
+    MMR(sizefrom), requiring the proofs to have exactly the shape the two
+    sizes imply.
+
+    Sizes are node counts (MMR(i) has i + 1 nodes). `sizefrom` MUST be the size
+    of the state the verifier already trusts; if it is taken from the proof the
+    check is void. Only `sizeto` is required to be a complete MMR size: every
+    trusted size was itself a checked target.
+
+    For a complete MMR the set bits of leaf_count(size - 1) are the peak
+    heights, high to low, which is accumulator order. Let `split` be the
+    highest bit on which the two bitmaps differ; as sizeto > sizefrom the
+    target has it and the origin does not. An origin peak above `split` is
+    also a peak of the target: its path is empty and it is returned unchanged.
+    Every origin peak below `split` is committed by the target peak of height
+    `split`: its path has length split - h, and every such path must prove
+    the same root. The target's remaining peaks lie below every origin peak,
+    so no proof reaches them; the prover supplies them as right peaks, and
+    their count is returned.
+
+    Returns (roots, nright): the proven peaks of MMR(sizeto) in descending
+    height order (the unchanged peaks, then the one proven root if any), and
+    the number of right peaks the prover must supply. roots + rightpeaks is
+    the accumulator of MMR(sizeto).
+
+    Raises ValueError if the sizes do not grow, the target size is not
+    complete, the accumulator or proof count differs from the origin peak
+    count, a path has a length other than the sizes imply, or two paths under
+    one target peak prove different roots.
+    """
+    if sizeto <= sizefrom:
+        raise ValueError("sizeto must exceed sizefrom")
+    to = leaf_count(sizeto - 1)
+    if mmr_size_for_leaf_count(to) != sizeto:
+        raise ValueError("sizeto is not a complete MMR size")
+    frm = leaf_count(sizefrom - 1) if sizefrom > 0 else 0
+    n = bin(frm).count("1")
+    if len(accumulatorfrom) != n:
+        raise ValueError("accumulator length does not match the origin peak count")
+    if len(proofs) != n:
+        raise ValueError("proof count does not match the origin peak count")
+    nto = bin(to).count("1")
+    if n == 0:
+        return [], nto
+
+    split = (frm ^ to).bit_length() - 1
+    roots = []
+    # Nodes preceding the current origin peak's subtree; a peak of height h
+    # sits at offset + 2^(h+1) - 2 and its subtree has 2^(h+1) - 1 nodes.
+    offset = 0
+    i = 0
+
+    # Origin peaks above the split are also peaks of the target. The path is
+    # not read; requiring it to be empty rejects unused material.
+    for h in range(frm.bit_length() - 1, split, -1):
+        if not (frm >> h) & 1:
+            continue
+        if len(proofs[i]) != 0:
+            raise ValueError(f"path {i}: expected length 0, got {len(proofs[i])}")
+        roots.append(accumulatorfrom[i])
+        offset += (1 << (h + 1)) - 1
+        i += 1
+
+    # Origin peaks below the split are all committed by the target peak of
+    # height `split` (bit `split` itself is clear in frm), so each path must
+    # have length split - h and every path must prove the same root.
+    above = len(roots)
+    root = None
+    for h in range(split - 1, -1, -1):
+        if not (frm >> h) & 1:
+            continue
+        expected = split - h
+        if len(proofs[i]) != expected:
+            raise ValueError(f"path {i}: expected length {expected}, got {len(proofs[i])}")
+        subtree = (1 << (h + 1)) - 1
+        proven = included_root(offset + subtree - 1, accumulatorfrom[i], proofs[i])
+        if i == above:
+            root = proven
+        elif proven != root:
+            raise ValueError(f"path {i} proves a different root from the paths before it")
+        offset += subtree
+        i += 1
+    if n > above:
+        roots.append(root)
+
+    return roots, nto - len(roots)
+
+
 # ------------------------------------------------------------------------------
 # Essential supporting algorithms
 # ------------------------------------------------------------------------------
